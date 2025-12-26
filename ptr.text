@@ -1,0 +1,6 @@
+furure implemenartion for add_workspace_booking.php
+✅ Add admin email / WhatsApp notifications
+✅ Add booking cancellation logic
+✅ Add availability API
+
+Would you like me to show the frontend-side verification (token expiry auto-logout) next? That helps auto-redirect users to login if their JWT is expired
