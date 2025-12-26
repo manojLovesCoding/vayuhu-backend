@@ -129,7 +129,7 @@ if (!isset($_FILES["image"]) || $_FILES["image"]["error"] !== UPLOAD_ERR_OK) {
     exit;
 }
 
-$uploadDir = "uploads/spaces/";
+$uploadDir = "uploads/";
 if (!is_dir($uploadDir)) {
     mkdir($uploadDir, 0777, true);
 }

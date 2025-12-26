@@ -51,7 +51,7 @@ if (!$conn) {
     exit;
 }
 
-$baseURL = "http://localhost/vayuhu_backend"; // adjust if folder name differs
+$baseURL = "http://localhost/vayuhuBackend"; // adjust if folder name differs
 
 // Remove 'comments' column from SQL
 $sql = "SELECT 

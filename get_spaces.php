@@ -12,7 +12,7 @@ if (!$conn) {
     exit;
 }
 
-$baseURL = "http://localhost/vayuhu_backend";
+$baseURL = "http://localhost/vayuhuBackend";
 $today = date("Y-m-d");
 
 $sql = "SELECT 

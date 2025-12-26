@@ -50,7 +50,7 @@ try {
     exit;
 }
 
-$baseURL = "http://localhost/vayuhu_backend"; // change if folder differs
+$baseURL = "http://localhost/vayuhuBackend"; // change if folder differs
 
 // ✅ Get user id from query string
 if (!isset($_GET['id'])) {

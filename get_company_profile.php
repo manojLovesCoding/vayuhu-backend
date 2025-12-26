@@ -78,7 +78,7 @@ if ($result && $result->num_rows > 0) {
 
     // Fix logo URL for frontend
     if ($profile['logo']) {
-        $profile['logo'] = "http://localhost/vayuhu_backend/" . $profile['logo'];
+        $profile['logo'] = "http://localhost/vayuhuBackend/" . $profile['logo'];
     }
 
     echo json_encode(["success" => true, "profile" => $profile]);
