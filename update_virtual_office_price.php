@@ -19,6 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 // ✅ NEW: JWT VERIFICATION LOGIC
 // -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -61,6 +62,7 @@ if (
     empty($data['min_duration']) ||
     empty($data['max_duration']) ||
     empty($data['price']) ||
+    empty($data['gst']) ||
     empty($data['status'])
 ) {
     echo json_encode(["status" => "error", "message" => "All fields are required."]);
@@ -71,14 +73,26 @@ $id = $conn->real_escape_string($data['id']);
 $min_duration = $conn->real_escape_string($data['min_duration']);
 $max_duration = $conn->real_escape_string($data['max_duration']);
 $price = $conn->real_escape_string($data['price']);
+$gst = $conn->real_escape_string($data['gst']);
 $status = $conn->real_escape_string($data['status']);
+
+/* ✅ GST VALIDATION (ADD HERE) */
+if ($gst < 0 || $gst > 28) {
+    echo json_encode([
+        "status" => "error",
+        "message" => "GST must be between 0 and 28"
+    ]);
+    exit;
+}
 
 $sql = "UPDATE virtualoffice_prices 
         SET min_duration='$min_duration', 
             max_duration='$max_duration', 
-            price='$price', 
+            price='$price',
+            gst='$gst',
             status='$status'
         WHERE id='$id'";
+
 
 if ($conn->query($sql)) {
     echo json_encode(["status" => "success", "message" => "Record updated successfully."]);
@@ -87,4 +101,3 @@ if ($conn->query($sql)) {
 }
 
 $conn->close();
-?>

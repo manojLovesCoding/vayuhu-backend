@@ -62,10 +62,12 @@ $sql = "SELECT
             min_duration,
             max_duration,
             price,
+            gst,
             status,
             created_at
         FROM virtualoffice_prices
         ORDER BY id DESC";
+
 
 $result = $conn->query($sql);
 $priceList = [];
