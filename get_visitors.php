@@ -2,7 +2,7 @@
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); // ✅ Added for secure communication
+header("Access-Control-Allow-Credentials: true"); 
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -10,17 +10,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// ✅ NEW: Include JWT library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key (Must match your other scripts)
 $secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
 
 require_once 'db.php';
 
-// ✅ Read JSON input
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!$data) {
@@ -28,9 +25,6 @@ if (!$data) {
     exit;
 }
 
-// ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
-// ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -44,7 +38,7 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; // Extract user ID from token
+    $decoded_user_id = $decoded->data->id; 
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -58,17 +52,15 @@ if (!$user_id) {
     exit;
 }
 
-// ✅ NEW: SECURITY CHECK - Token ID must match Payload User ID
 if ((int)$decoded_user_id !== (int)$user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized access: Identity mismatch."]);
     exit;
 }
 
-// ✅ Fetch visitors with company name joined
-// 🟢 UPDATED SELECT: Added v.payment_id and v.amount_paid
+// ✅ FIXED SELECT: Join specifically on booking_id to prevent duplicates
 $sql = "
-    SELECT 
+    SELECT DISTINCT
         v.id,
         v.name,
         v.contact_no,
@@ -79,9 +71,12 @@ $sql = "
         v.payment_id,
         v.amount_paid,
         v.added_on,
-        c.company_name
+        c.company_name,
+        wb.workspace_title as host_workspace
     FROM visitors v
     LEFT JOIN company_profile c ON v.company_id = c.id
+    -- 🟢 CRITICAL: Link only to the specific booking ID recorded for this visitor
+    LEFT JOIN workspace_bookings wb ON v.booking_id = wb.booking_id
     WHERE v.user_id = ?
     ORDER BY v.id DESC
 ";
@@ -99,11 +94,12 @@ while ($row = $result->fetch_assoc()) {
         "contact"       => $row["contact_no"],
         "email"         => $row["email"],
         "company_name"  => $row["company_name"] ?: "—",
+        "workspace"     => $row["host_workspace"] ?: "Manual Entry",
         "visiting_date" => $row["visiting_date"],
         "visiting_time" => $row["visiting_time"],
         "reason"        => $row["reason"],
-        "payment_id"    => $row["payment_id"],    // ✅ New field sent to React
-        "amount_paid"   => $row["amount_paid"],   // ✅ New field sent to React
+        "payment_id"    => $row["payment_id"],    
+        "amount_paid"   => $row["amount_paid"],   
         "added_on"      => $row["added_on"]
     ];
 }

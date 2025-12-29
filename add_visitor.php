@@ -77,6 +77,7 @@ if (!$company_id) {
 }
 
 // ✅ Collect visitor fields
+$booking_id    = $data['booking_id'] ?? null; // ✅ NEW: Relationship field
 $name          = trim($data['name'] ?? "");
 $contact       = trim($data['contact'] ?? "");
 $email         = trim($data['email'] ?? "");
@@ -84,9 +85,9 @@ $visitingDate  = trim($data['visitingDate'] ?? "");
 $visitingTime  = trim($data['visitingTime'] ?? "");
 $reason        = trim($data['reason'] ?? "");
 
-// ✅ NEW: Collect Payment fields
-$payment_id    = trim($data['payment_id'] ?? ""); // From Razorpay
-$amount_paid   = (float)($data['amount_paid'] ?? 0); // Amount paid for the pass
+// ✅ Collect Payment fields
+$payment_id    = trim($data['payment_id'] ?? ""); 
+$amount_paid   = (float)($data['amount_paid'] ?? 0); 
 
 // ✅ Validation
 if (empty($name) || empty($contact)) {
@@ -94,18 +95,17 @@ if (empty($name) || empty($contact)) {
     exit;
 }
 
-// ✅ UPDATED: Insert into database including payment fields
-// Added 'payment_id' and 'amount_paid' to the column list and values
-$sql = "INSERT INTO visitors (user_id, company_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, payment_id, amount_paid, added_on)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+// ✅ UPDATED QUERY: Added booking_id to link guests to reservations
+$sql = "INSERT INTO visitors (user_id, company_id, booking_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, payment_id, amount_paid, added_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
 $stmt = $conn->prepare($sql);
 
-// ✅ UPDATED: bind_param updated to "iissssssssd" 
-// (added 's' for payment_id and 'd' for double/float amount_paid)
-$stmt->bind_param("iissssssssd", 
+// ✅ Updated binding to "iiissssssssd" (added 'i' for booking_id)
+$stmt->bind_param("iisssssssssd", 
     $user_id, 
     $company_id, 
+    $booking_id, // ✅ Relationship Link
     $name, 
     $contact, 
     $email, 
