@@ -2,7 +2,7 @@
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); // ✅ Added for secure requests
+header("Access-Control-Allow-Credentials: true"); 
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -10,17 +10,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// ✅ NEW: Include JWT library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key (Must match login/signup scripts)
 $secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
 
 require_once 'db.php';
 
-// Read raw JSON body
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!$data) {
@@ -29,7 +26,7 @@ if (!$data) {
 }
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// ✅ JWT VERIFICATION LOGIC
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -44,21 +41,19 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; // ID inside the token
+    $decoded_user_id = $decoded->data->id; 
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
-// Extract user_id
 $user_id = $data['user_id'] ?? null;
 if (!$user_id) {
     echo json_encode(["success" => false, "message" => "User ID required"]);
     exit;
 }
 
-// ✅ NEW: SECURITY CHECK - Token ID must match Payload User ID
 if ((int)$decoded_user_id !== (int)$user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized access: Identity mismatch."]);
@@ -89,17 +84,38 @@ $visitingDate  = trim($data['visitingDate'] ?? "");
 $visitingTime  = trim($data['visitingTime'] ?? "");
 $reason        = trim($data['reason'] ?? "");
 
+// ✅ NEW: Collect Payment fields
+$payment_id    = trim($data['payment_id'] ?? ""); // From Razorpay
+$amount_paid   = (float)($data['amount_paid'] ?? 0); // Amount paid for the pass
+
 // ✅ Validation
 if (empty($name) || empty($contact)) {
     echo json_encode(["success" => false, "message" => "Name and Contact No are required"]);
     exit;
 }
 
-// ✅ Insert into database
-$sql = "INSERT INTO visitors (user_id, company_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, added_on)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+// ✅ UPDATED: Insert into database including payment fields
+// Added 'payment_id' and 'amount_paid' to the column list and values
+$sql = "INSERT INTO visitors (user_id, company_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, payment_id, amount_paid, added_on)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+
 $stmt = $conn->prepare($sql);
-$stmt->bind_param("iisssssss", $user_id, $company_id, $name, $contact, $email, $company_name, $visitingDate, $visitingTime, $reason);
+
+// ✅ UPDATED: bind_param updated to "iissssssssd" 
+// (added 's' for payment_id and 'd' for double/float amount_paid)
+$stmt->bind_param("iissssssssd", 
+    $user_id, 
+    $company_id, 
+    $name, 
+    $contact, 
+    $email, 
+    $company_name, 
+    $visitingDate, 
+    $visitingTime, 
+    $reason,
+    $payment_id,
+    $amount_paid
+);
 
 if ($stmt->execute()) {
     echo json_encode([

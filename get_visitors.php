@@ -66,6 +66,7 @@ if ((int)$decoded_user_id !== (int)$user_id) {
 }
 
 // ✅ Fetch visitors with company name joined
+// 🟢 UPDATED SELECT: Added v.payment_id and v.amount_paid
 $sql = "
     SELECT 
         v.id,
@@ -75,6 +76,8 @@ $sql = "
         v.visiting_date,
         v.visiting_time,
         v.reason,
+        v.payment_id,
+        v.amount_paid,
         v.added_on,
         c.company_name
     FROM visitors v
@@ -99,6 +102,8 @@ while ($row = $result->fetch_assoc()) {
         "visiting_date" => $row["visiting_date"],
         "visiting_time" => $row["visiting_time"],
         "reason"        => $row["reason"],
+        "payment_id"    => $row["payment_id"],    // ✅ New field sent to React
+        "amount_paid"   => $row["amount_paid"],   // ✅ New field sent to React
         "added_on"      => $row["added_on"]
     ];
 }
