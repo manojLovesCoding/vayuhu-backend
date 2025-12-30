@@ -2,7 +2,7 @@
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); 
+header("Access-Control-Allow-Credentials: true");
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -41,7 +42,7 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; 
+    $decoded_user_id = $decoded->data->id;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -86,8 +87,8 @@ $visitingTime  = trim($data['visitingTime'] ?? "");
 $reason        = trim($data['reason'] ?? "");
 
 // ✅ Collect Payment fields
-$payment_id    = trim($data['payment_id'] ?? ""); 
-$amount_paid   = (float)($data['amount_paid'] ?? 0); 
+$payment_id    = trim($data['payment_id'] ?? "");
+$amount_paid   = (float)($data['amount_paid'] ?? 0);
 
 // ✅ Validation
 if (empty($name) || empty($contact)) {
@@ -95,23 +96,50 @@ if (empty($name) || empty($contact)) {
     exit;
 }
 
+/* ==================================================
+   ✅ ADD THIS BLOCK RIGHT HERE
+   ================================================== */
+
+$checkBooking = $conn->prepare("
+    SELECT start_date, end_date 
+    FROM workspace_bookings 
+    WHERE booking_id = ? AND user_id = ?
+");
+$checkBooking->bind_param("ii", $booking_id, $user_id);
+$checkBooking->execute();
+$checkBooking->bind_result($start_date, $end_date);
+$checkBooking->fetch();
+$checkBooking->close();
+
+if (!$start_date || $visitingDate < $start_date || $visitingDate > $end_date) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Visiting date must be within booking duration"
+    ]);
+    exit;
+}
+
+/* ================================================== */
+
 // ✅ UPDATED QUERY: Added booking_id to link guests to reservations
 $sql = "INSERT INTO visitors (user_id, company_id, booking_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, payment_id, amount_paid, added_on)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
+
 $stmt = $conn->prepare($sql);
 
 // ✅ Updated binding to "iiissssssssd" (added 'i' for booking_id)
-$stmt->bind_param("iisssssssssd", 
-    $user_id, 
-    $company_id, 
+$stmt->bind_param(
+    "iisssssssssd",
+    $user_id,
+    $company_id,
     $booking_id, // ✅ Relationship Link
-    $name, 
-    $contact, 
-    $email, 
-    $company_name, 
-    $visitingDate, 
-    $visitingTime, 
+    $name,
+    $contact,
+    $email,
+    $company_name,
+    $visitingDate,
+    $visitingTime,
     $reason,
     $payment_id,
     $amount_paid
@@ -132,4 +160,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>
