@@ -43,7 +43,7 @@ try {
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
         // If you need to restrict this to admins only, you can check:
-        // if ($decoded->data->role !== 'admin') { throw new Exception("Unauthorized"); }
+        if ($decoded->data->role !== 'admin') { throw new Exception("Unauthorized"); }
     } catch (Exception $e) {
         http_response_code(401);
         throw new Exception("Invalid or expired token.");
