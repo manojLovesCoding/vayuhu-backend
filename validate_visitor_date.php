@@ -45,9 +45,9 @@ try {
 }
 
 // ---------------- INPUT ----------------
-$user_id       = $data['user_id'] ?? null;
-$booking_id    = $data['booking_id'] ?? null;
-$visitingDate  = $data['visitingDate'] ?? null;
+$user_id      = $data['user_id'] ?? null;
+$booking_id   = $data['booking_id'] ?? null;
+$visitingDate = $data['visitingDate'] ?? null;
 
 if (!$user_id || !$booking_id || !$visitingDate) {
     echo json_encode([
@@ -63,37 +63,7 @@ if ((int)$user_id !== (int)$decoded_user_id) {
     exit;
 }
 
-// ---------------- BOOKING VALIDATION ----------------
-$stmt = $conn->prepare("
-    SELECT start_date, end_date 
-    FROM workspace_bookings 
-    WHERE booking_id = ? AND user_id = ?
-");
-$stmt->bind_param("ii", $booking_id, $user_id);
-$stmt->execute();
-$stmt->bind_result($start_date, $end_date);
-$stmt->fetch();
-$stmt->close();
-
-if (!$start_date) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Booking not found or unauthorized"
-    ]);
-    exit;
-}
-
-if ($visitingDate < $start_date || $visitingDate > $end_date) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Visiting date must be within booking duration",
-        "allowed_from" => $start_date,
-        "allowed_to" => $end_date
-    ]);
-    exit;
-}
-
-// ---------------- SUCCESS ----------------
+// ---------------- SUCCESS (no booking validation anymore) ----------------
 echo json_encode([
     "success" => true,
     "message" => "Visiting date is valid"

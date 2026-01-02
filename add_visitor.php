@@ -11,14 +11,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
-
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 $secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
-
 require_once 'db.php';
 
+// Get JSON input
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!$data) {
@@ -26,9 +25,7 @@ if (!$data) {
     exit;
 }
 
-// ------------------------------------
-// ✅ JWT VERIFICATION LOGIC
-// ------------------------------------
+// ---------------- JWT VERIFICATION ----------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -61,7 +58,7 @@ if ((int)$decoded_user_id !== (int)$user_id) {
     exit;
 }
 
-// ✅ Fetch company info automatically
+// ---------------- FETCH COMPANY INFO ----------------
 $company_id = null;
 $company_name = null;
 
@@ -77,63 +74,37 @@ if (!$company_id) {
     exit;
 }
 
-// ✅ Collect visitor fields
-$booking_id    = $data['booking_id'] ?? null; // ✅ NEW: Relationship field
+// ---------------- COLLECT VISITOR & PAYMENT DATA ----------------
+$booking_id    = $data['booking_id'] ?? null;
 $name          = trim($data['name'] ?? "");
 $contact       = trim($data['contact'] ?? "");
 $email         = trim($data['email'] ?? "");
 $visitingDate  = trim($data['visitingDate'] ?? "");
 $visitingTime  = trim($data['visitingTime'] ?? "");
 $reason        = trim($data['reason'] ?? "");
-
-// ✅ Collect Payment fields
 $payment_id    = trim($data['payment_id'] ?? "");
 $amount_paid   = (float)($data['amount_paid'] ?? 0);
 
-// ✅ Validation
+// ---------------- BASIC VALIDATION ----------------
 if (empty($name) || empty($contact)) {
     echo json_encode(["success" => false, "message" => "Name and Contact No are required"]);
     exit;
 }
 
-/* ==================================================
-   ✅ ADD THIS BLOCK RIGHT HERE
-   ================================================== */
-
-$checkBooking = $conn->prepare("
-    SELECT start_date, end_date 
-    FROM workspace_bookings 
-    WHERE booking_id = ? AND user_id = ?
-");
-$checkBooking->bind_param("ii", $booking_id, $user_id);
-$checkBooking->execute();
-$checkBooking->bind_result($start_date, $end_date);
-$checkBooking->fetch();
-$checkBooking->close();
-
-if (!$start_date || $visitingDate < $start_date || $visitingDate > $end_date) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Visiting date must be within booking duration"
-    ]);
-    exit;
-}
-
-/* ================================================== */
-
-// ✅ UPDATED QUERY: Added booking_id to link guests to reservations
-$sql = "INSERT INTO visitors (user_id, company_id, booking_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason, payment_id, amount_paid, added_on)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
-
+// ---------------- INSERT VISITOR INTO DATABASE ----------------
+$sql = "INSERT INTO visitors (
+            user_id, company_id, booking_id, name, contact_no, email, company_name, 
+            visiting_date, visiting_time, reason, payment_id, amount_paid, added_on
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
 $stmt = $conn->prepare($sql);
 
-// ✅ Updated binding to "iiissssssssd" (added 'i' for booking_id)
+// Bind parameters: i = int, s = string, d = double
 $stmt->bind_param(
     "iisssssssssd",
     $user_id,
     $company_id,
-    $booking_id, // ✅ Relationship Link
+    $booking_id,
     $name,
     $contact,
     $email,
