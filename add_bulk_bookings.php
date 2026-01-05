@@ -4,7 +4,6 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// 1. CORS Headers
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Credentials: true");
@@ -16,17 +15,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// ✅ NEW: Include JWT Library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
 
 try {
-    // ------------------------------------
-    // ✅ NEW: JWT VERIFICATION LOGIC
-    // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -39,20 +34,16 @@ try {
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-        // User is authenticated
     } catch (Exception $e) {
         http_response_code(401);
         throw new Exception("Invalid or expired token.");
     }
-    // ------------------------------------
 
     include 'db.php';
 
-    // 2. Decode the BULK payload
     $inputData = json_decode(file_get_contents("php://input"), true);
     if (json_last_error() !== JSON_ERROR_NONE) throw new Exception("Invalid JSON payload.");
 
-    // Expecting: { "bookings": [ ... ] }
     if (!isset($inputData['bookings']) || !is_array($inputData['bookings'])) {
         throw new Exception("Invalid format. Expected 'bookings' array.");
     }
@@ -60,10 +51,8 @@ try {
     $bookings = $inputData['bookings'];
     $responseIds = [];
     
-    // 3. START TRANSACTION (The Safety Net)
     $conn->begin_transaction();
 
-    // 4. Get the starting Booking ID Number for today
     $today = date("Ymd");
     $query = "SELECT booking_id FROM workspace_bookings WHERE booking_id LIKE 'BKG-$today-%' ORDER BY booking_id DESC LIMIT 1";
     $result = $conn->query($query);
@@ -72,10 +61,8 @@ try {
         ? (int)substr($row['booking_id'], -3) 
         : 0;
 
-    // 5. Loop through every booking in the cart
     foreach ($bookings as $index => $data) {
         
-        // --- A. VALIDATION ---
         $user_id         = (int)($data['user_id'] ?? 0);
         $space_id        = (int)($data['space_id'] ?? 0);
         
@@ -93,6 +80,8 @@ try {
         $total_hours     = (int)($data['total_hours'] ?? 1);
         $num_attendees   = (int)($data['num_attendees'] ?? 1);
         $price_per_unit  = (float)($data['price_per_unit'] ?? 0);
+        
+        // These are now populated by the breakdown logic in React
         $base_amount     = (float)($data['base_amount'] ?? 0);
         $gst_amount      = (float)($data['gst_amount'] ?? 0);
         $discount_amount = (float)($data['discount_amount'] ?? 0);
@@ -106,9 +95,6 @@ try {
         if ($user_id <= 0 || $space_id <= 0 || !$workspace_title || !$plan_type || !$start_date || !$end_date) {
             throw new Exception("Item #".($index+1).": Missing required fields.");
         }
-        if (!in_array($plan_type, ['hourly', 'daily', 'monthly'])) {
-            throw new Exception("Item #".($index+1).": Invalid plan_type.");
-        }
         
         if (($plan_type === 'hourly' || $plan_type === 'daily') && (date('w', strtotime($start_date)) == 0 || date('w', strtotime($end_date)) == 0)) {
             throw new Exception("Item #".($index+1).": Bookings cannot be made on Sundays.");
@@ -117,10 +103,9 @@ try {
         if ($start_time && strlen($start_time) === 5) $start_time .= ':00';
         if ($end_time && strlen($end_time) === 5) $end_time .= ':00';
 
-        // --- B. CONFLICT CHECK ---
+        // Conflict Check
         $stmt = $conn->prepare("
-            SELECT plan_type, start_date, end_date, start_time, end_time
-            FROM workspace_bookings
+            SELECT plan_type FROM workspace_bookings
             WHERE space_id = ?
               AND (
                   (plan_type = 'hourly' AND start_date = ? AND NOT (? <= start_time OR ? >= end_time))
@@ -131,21 +116,17 @@ try {
         ");
         $stmt->bind_param("issssss", $space_id, $start_date, $end_time, $start_time, $start_date, $start_date, $end_date);
         $stmt->execute();
-        $result = $stmt->get_result();
-        if ($result && $result->num_rows > 0) {
+        $resCheck = $stmt->get_result();
+        if ($resCheck && $resCheck->num_rows > 0) {
             throw new Exception("Item #".($index+1)." ($workspace_title) is already booked for this time.");
         }
         $stmt->close();
 
-        // --- C. ID GENERATION ---
         $currentSequence++; 
-        $nextNum = str_pad($currentSequence, 3, '0', STR_PAD_LEFT);
-        $booking_id = "BKG-$today-$nextNum";
-        
+        $booking_id = "BKG-$today-" . str_pad($currentSequence, 3, '0', STR_PAD_LEFT);
         $responseIds[] = $booking_id;
         $status = 'confirmed'; 
 
-        // --- D. INSERT QUERY ---
         $stmt = $conn->prepare("
             INSERT INTO workspace_bookings (
                 booking_id, user_id, space_id, seat_codes, workspace_title, plan_type,
@@ -171,7 +152,6 @@ try {
         $stmt->close();
     }
 
-    // 6. COMMIT TRANSACTION
     $conn->commit();
     $conn->close();
 
@@ -182,18 +162,12 @@ try {
     ]);
 
 } catch (Exception $e) {
-    // 7. ROLLBACK
     if (isset($conn) && $conn instanceof mysqli && $conn->connect_errno == 0) {
         $conn->rollback();
         $conn->close();
     }
     
-    // Set 401 status for auth errors, otherwise 400
-    if (strpos($e->getMessage(), "Authorization") !== false || strpos($e->getMessage(), "token") !== false) {
-        http_response_code(401);
-    } else {
-        http_response_code(400);
-    }
+    http_response_code(strpos($e->getMessage(), "token") !== false ? 401 : 400);
 
     echo json_encode([
         "success" => false, 
