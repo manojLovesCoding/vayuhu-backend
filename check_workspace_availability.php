@@ -5,7 +5,6 @@ error_reporting(E_ALL);
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Credentials: true");
-// ✅ Added Authorization to allowed headers
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
@@ -14,18 +13,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
     exit();
 }
 
-// ✅ NEW: Include JWT Library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
 
 try {
-    // ------------------------------------
-    // ✅ NEW: JWT VERIFICATION LOGIC
-    // ------------------------------------
-    
+
+    // ---------------- JWT VERIFICATION ----------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -34,22 +30,22 @@ try {
         throw new Exception("Authorization header missing. Please log in.");
     }
 
-    // Extract token from "Bearer <token>"
     $token = str_replace('Bearer ', '', $authHeader);
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-        // User is authenticated
     } catch (Exception $e) {
         http_response_code(401);
         throw new Exception("Invalid or expired token. Please log in again.");
     }
-    // ------------------------------------
+    // --------------------------------------------------
 
     include 'db.php';
 
     $data = json_decode(file_get_contents("php://input"), true);
-    if (json_last_error() !== JSON_ERROR_NONE) throw new Exception("Invalid JSON payload.");
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new Exception("Invalid JSON payload.");
+    }
 
     $space_id   = (int)($data['space_id'] ?? 0);
     $plan_type  = strtolower(trim($data['plan_type'] ?? ''));
@@ -62,16 +58,15 @@ try {
         throw new Exception("Missing required parameters.");
     }
 
-    // Basic validation
     if (!in_array($plan_type, ['hourly', 'daily', 'monthly'])) {
         throw new Exception("Invalid plan_type value.");
     }
 
-    // Normalize time format
     if ($start_time && strlen($start_time) === 5) $start_time .= ":00";
     if ($end_time && strlen($end_time) === 5) $end_time .= ":00";
 
-    // --- Check existing bookings for this space ---
+    // ---------------- EXISTING BOOKINGS CHECK ----------------
+    // ❗ REMOVED LIMIT 1 (IMPORTANT)
     $stmt = $conn->prepare("
         SELECT plan_type, start_date, end_date, start_time, end_time
         FROM workspace_bookings
@@ -82,20 +77,64 @@ try {
              OR (plan_type = 'daily' AND start_date = ?)
              OR (plan_type = 'monthly' AND NOT (? < start_date OR ? > end_date))
               )
-        LIMIT 1
     ");
-    $stmt->bind_param("issssss", $space_id, $start_date, $end_time, $start_time, $start_date, $start_date, $end_date);
+    $stmt->bind_param(
+        "issssss",
+        $space_id,
+        $start_date,
+        $end_time,
+        $start_time,
+        $start_date,
+        $start_date,
+        $end_date
+    );
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // --- If conflict found ---
+    // ---------------- CONFLICT FOUND ----------------
     if ($result && $result->num_rows > 0) {
-        $conflict = $result->fetch_assoc();
+
+        // ✅ NEW: detect full-day blocking (daily/monthly)
+        $hasFullDayBlock = false;
+        $blockedEndDate = null;
+
+        $conflicts = [];
+        while ($row = $result->fetch_assoc()) {
+            $conflicts[] = $row;
+
+            if (in_array($row['plan_type'], ['daily', 'monthly'])) {
+                if ($start_date >= $row['start_date'] && $start_date <= $row['end_date']) {
+                    $hasFullDayBlock = true;
+                    $blockedEndDate = $row['end_date'];
+                    break;
+                }
+            }
+        }
+
         $stmt->close();
 
-        // 🟠 If the conflict is hourly, compute and return available hourly slots
+        // ---------------- FULL DATE BLOCKED ----------------
+        // ✅ NEW: return available DATE instead of time slots
+        if ($hasFullDayBlock) {
+            $nextAvailableDate = date(
+                'Y-m-d',
+                strtotime($blockedEndDate . ' +1 day')
+            );
+
+            echo json_encode([
+                "success" => false,
+                "message" => "This workspace is fully booked for the selected date.",
+                "available_dates" => [
+                    "from" => $nextAvailableDate
+                ]
+            ]);
+            exit;
+        }
+
+        // ---------------- HOURLY CONFLICT (TIME BASED) ----------------
+        // 🔵 YOUR EXISTING LOGIC – UNCHANGED
         if ($plan_type === 'hourly') {
-            // Get all hourly bookings for this date
+
             $bookStmt = $conn->prepare("
                 SELECT start_time, end_time
                 FROM workspace_bookings
@@ -106,6 +145,7 @@ try {
             $bookStmt->bind_param("is", $space_id, $start_date);
             $bookStmt->execute();
             $bookings = $bookStmt->get_result();
+
             $bookedRanges = [];
             while ($row = $bookings->fetch_assoc()) {
                 $bookedRanges[] = [
@@ -115,9 +155,8 @@ try {
             }
             $bookStmt->close();
 
-            // Workspace working hours
-            $openingHour = 8;  // 08:00
-            $closingHour = 19; // 19:59
+            $openingHour = 8;
+            $closingHour = 19;
 
             $availableSlots = [];
 
@@ -134,7 +173,6 @@ try {
                 }
 
                 if ($isAvailable) {
-                    // Convert to readable 12-hour format
                     $displayStart = date("g:i A", strtotime($slotStart));
                     $displayEnd   = date("g:i A", strtotime($slotEnd));
                     $availableSlots[] = "$displayStart - $displayEnd";
@@ -149,7 +187,7 @@ try {
             exit;
         }
 
-        // For daily/monthly conflict, respond normally
+        // ---------------- DAILY / MONTHLY CONFLICT ----------------
         echo json_encode([
             "success" => false,
             "message" => "This workspace is already booked for the selected time/date."
@@ -159,15 +197,19 @@ try {
 
     $stmt->close();
 
-    // ✅ If no conflict found
+    // ---------------- NO CONFLICT ----------------
     echo json_encode([
         "success" => true,
         "message" => "Workspace available for booking."
     ]);
 
 } catch (Exception $e) {
-    // Determine status code: 401 for auth, 400 for general
-    $statusCode = ($e->getCode() === 401 || strpos($e->getMessage(), "token") !== false) ? 401 : 400;
+
+    $statusCode = (
+        $e->getCode() === 401 ||
+        stripos($e->getMessage(), 'token') !== false
+    ) ? 401 : 400;
+
     http_response_code($statusCode);
     echo json_encode([
         "success" => false,
