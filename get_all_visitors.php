@@ -50,25 +50,27 @@ require_once 'db.php';
 // --- Query Visitors ---
 // UPDATED SQL: Added LEFT JOIN for 'admins' and logic to select the correct name
 $sql = "
-    SELECT 
-        v.id,
-        v.user_id,
-        v.admin_id,
-        v.company_id,
-        v.name AS visitor_name,
-        v.contact_no AS contact,
-        v.email AS email,
-        v.company_name,
-        v.visiting_date,
-        v.visiting_time,
-        v.reason,
-        v.added_on,
-        u.name AS user_name,
-        a.name AS admin_name
-    FROM visitors v
-    LEFT JOIN users u ON v.user_id = u.id
-    LEFT JOIN admins a ON v.admin_id = a.id
-    ORDER BY v.added_on DESC
+   SELECT 
+    v.id,
+    v.user_id,
+    v.admin_id,
+    v.company_id,
+    v.name,
+    v.contact_no,
+    v.email,
+    v.company_name,
+    v.visiting_date,
+    v.check_in_time,
+     v.check_out_time,  -- Add this line
+    v.reason,
+    v.added_on,
+    u.name AS user_name,
+    a.name AS admin_name
+FROM visitors v
+LEFT JOIN users u ON v.user_id = u.id
+LEFT JOIN admins a ON v.admin_id = a.id
+ORDER BY v.added_on DESC
+
 ";
 
 $result = $conn->query($sql);
@@ -94,20 +96,21 @@ while ($row = $result->fetch_assoc()) {
     }
 
     $visitors[] = [
-        "id" => (int)$row['id'],
-        "user_id" => $row['user_id'] ? (int)$row['user_id'] : null,
-        "company_id" => $row['company_id'] ? (int)$row['company_id'] : null,
-        "name" => $row['visitor_name'],
-        "contact" => $row['contact'],
-        "email" => $row['email'],
-        "company_name" => $row['company_name'],
-        "visiting_date" => $row['visiting_date'],
-        "visiting_time" => $row['visiting_time'],
-        "reason" => $row['reason'],
-        "added_on" => $row['added_on'],
-        // We map the calculated name to 'user_name' so the frontend works without changes
-        "user_name" => $added_by_name 
-    ];
+    "id" => (int)$row['id'],
+    "user_id" => $row['user_id'] ? (int)$row['user_id'] : null,
+    "company_id" => $row['company_id'] ? (int)$row['company_id'] : null,
+    "name" => $row['name'], // ✅ MATCHES REACT
+    "contact" => $row['contact_no'], // ✅ MATCHES REACT
+    "email" => $row['email'],
+    "company_name" => $row['company_name'],
+    "visiting_date" => $row['visiting_date'],
+   "check_in_time" => $row['check_in_time'],       // Use check_in_time here
+    "check_out_time" => $row['check_out_time'],     // Add check_out_time here
+    "reason" => $row['reason'],
+    "added_on" => $row['added_on'],
+    "user_name" => $added_by_name
+];
+
 }
 
 echo json_encode([

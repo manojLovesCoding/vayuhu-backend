@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -80,10 +81,17 @@ $name          = trim($data['name'] ?? "");
 $contact       = trim($data['contact'] ?? "");
 $email         = trim($data['email'] ?? "");
 $visitingDate  = trim($data['visitingDate'] ?? "");
-$visitingTime  = trim($data['visitingTime'] ?? "");
+$checkInTime   = trim($data['checkInTime'] ?? "");
+$checkOutTime  = trim($data['checkOutTime'] ?? "");
 $reason        = trim($data['reason'] ?? "");
+$attendees     = (int)($data['attendees'] ?? 1);
 $payment_id    = trim($data['payment_id'] ?? "");
 $amount_paid   = (float)($data['amount_paid'] ?? 0);
+
+// 🧠 Debug log
+error_log("DEBUG: Received payment_id = " . $payment_id);
+
+
 
 // ---------------- BASIC VALIDATION ----------------
 if (empty($name) || empty($contact)) {
@@ -93,28 +101,35 @@ if (empty($name) || empty($contact)) {
 
 // ---------------- INSERT VISITOR INTO DATABASE ----------------
 $sql = "INSERT INTO visitors (
-            user_id, company_id, booking_id, name, contact_no, email, company_name, 
-            visiting_date, visiting_time, reason, payment_id, amount_paid, added_on
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+    user_id, company_id, booking_id, name, contact_no, email, company_name, 
+    visiting_date, check_in_time, check_out_time, reason, attendees, 
+    payment_id, amount_paid, added_on
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
 
 $stmt = $conn->prepare($sql);
 
-// Bind parameters: i = int, s = string, d = double
+// 🟢 Correct bind_param type string
+// i = int, s = string, d = double
 $stmt->bind_param(
-    "iisssssssssd",
-    $user_id,
-    $company_id,
-    $booking_id,
-    $name,
-    $contact,
-    $email,
-    $company_name,
-    $visitingDate,
-    $visitingTime,
-    $reason,
-    $payment_id,
-    $amount_paid
+    "iissssssssssid",
+    $user_id,        // i
+    $company_id,     // i
+    $booking_id,     // i
+    $name,           // s
+    $contact,        // s
+    $email,          // s
+    $company_name,   // s
+    $visitingDate,   // s
+    $checkInTime,    // s
+    $checkOutTime,   // s
+    $reason,         // s
+    $attendees,      // i
+    $payment_id,     // s ✅ must be a string
+    $amount_paid     // d
 );
+
+// 🧠 Debug log
+error_log("DEBUG: Received payment_id = " . $payment_id);
 
 if ($stmt->execute()) {
     echo json_encode([

@@ -2,7 +2,7 @@
 header("Access-Control-Allow-Origin: http://localhost:5173");
 header("Access-Control-Allow-Methods: POST, OPTIONS");
 header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); 
+header("Access-Control-Allow-Credentials: true");
 header("Content-Type: application/json; charset=UTF-8");
 
 if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
@@ -11,6 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
 }
 
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -38,7 +39,7 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; 
+    $decoded_user_id = $decoded->data->id;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -66,8 +67,10 @@ $sql = "
         v.contact_no,
         v.email,
         v.visiting_date,
-        v.visiting_time,
+        v.check_in_time,
+        v.check_out_time,
         v.reason,
+        v.attendees,
         v.payment_id,
         v.amount_paid,
         v.added_on,
@@ -75,11 +78,11 @@ $sql = "
         wb.workspace_title as host_workspace
     FROM visitors v
     LEFT JOIN company_profile c ON v.company_id = c.id
-    -- 🟢 CRITICAL: Link only to the specific booking ID recorded for this visitor
     LEFT JOIN workspace_bookings wb ON v.booking_id = wb.booking_id
     WHERE v.user_id = ?
     ORDER BY v.id DESC
 ";
+
 
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $user_id);
@@ -96,10 +99,12 @@ while ($row = $result->fetch_assoc()) {
         "company_name"  => $row["company_name"] ?: "—",
         "workspace"     => $row["host_workspace"] ?: "Manual Entry",
         "visiting_date" => $row["visiting_date"],
-        "visiting_time" => $row["visiting_time"],
+        "check_in_time" => $row["check_in_time"],
+        "check_out_time" => $row["check_out_time"],
         "reason"        => $row["reason"],
-        "payment_id"    => $row["payment_id"],    
-        "amount_paid"   => $row["amount_paid"],   
+        "attendees"     => $row["attendees"],
+        "payment_id"    => $row["payment_id"],
+        "amount_paid"   => $row["amount_paid"],
         "added_on"      => $row["added_on"]
     ];
 }
@@ -112,4 +117,3 @@ if (count($visitors) > 0) {
 
 $stmt->close();
 $conn->close();
-?>

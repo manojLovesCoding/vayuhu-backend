@@ -77,12 +77,25 @@ try {
     $email = $data['email'] ?? null;
     $company_name = $data['company_name'] ?? null;
     $visiting_date = $data['visiting_date'] ?? null;
-    $visiting_time = $data['visiting_time'] ?? null;
+    $check_in_time  = $data['check_in_time'] ?? null;
+$check_out_time = $data['check_out_time'] ?? null;
+
     $reason = $data['reason'] ?? null;
 
     // 5. INSERT QUERY
-    $sql = "INSERT INTO visitors (user_id, admin_id, name, contact_no, email, company_name, visiting_date, visiting_time, reason) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO visitors (
+            user_id, 
+            admin_id, 
+            name, 
+            contact_no, 
+            email, 
+            company_name, 
+            visiting_date, 
+            check_in_time, 
+            check_out_time, 
+            reason
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
 
     $stmt = $conn->prepare($sql);
     
@@ -90,8 +103,19 @@ try {
         throw new Exception("SQL Prepare Failed: " . $conn->error);
     }
 
-    // i = int, s = string (iisssssss)
-    $stmt->bind_param("iisssssss", $user_id, $admin_id, $name, $contact, $email, $company_name, $visiting_date, $visiting_time, $reason);
+    $stmt->bind_param(
+    "iissssssss",
+    $user_id,
+    $admin_id,
+    $name,
+    $contact,
+    $email,
+    $company_name,
+    $visiting_date,
+    $check_in_time,
+    $check_out_time,
+    $reason
+);
 
     if ($stmt->execute()) {
         echo json_encode(["success" => true, "message" => "Visitor added successfully"]);
