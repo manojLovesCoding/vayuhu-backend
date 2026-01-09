@@ -1,29 +1,16 @@
 <?php
-// --- CORS Configuration ---
-$allowed_origin = "http://localhost:5173";
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-// --- Response Type ---
-header("Content-Type: application/json; charset=UTF-8");
-
-// --- Include Database ---
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
+require_once __DIR__ . '/vendor/autoload.php';
 require_once 'db.php';
 
-// ✅ NEW: Include JWT library
-require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // change to a secure random string
+
+
+$secret_key = $_ENV['JWT_SECRET'];
+
 
 // --- Get JSON Input ---
 $input = json_decode(file_get_contents("php://input"), true);
