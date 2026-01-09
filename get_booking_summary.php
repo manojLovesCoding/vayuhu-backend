@@ -2,32 +2,29 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// ------------------
-// CORS HEADERS
-// ------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// ✅ Load JWT Libraries
+// ------------------------------------
+// Load JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
-
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your other scripts
 
 try {
     include "db.php";
 
     // ------------------------------------
-    // ✅ JWT VERIFICATION (ADDED)
+    // JWT VERIFICATION
     // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -59,15 +56,15 @@ try {
         throw new Exception("Invalid user_id.");
     }
 
-    // ✅ SECURITY CHECK: Ensure token ID matches requested user_id
+    // SECURITY CHECK: Ensure token ID matches requested user_id
     if ($decoded_user_id !== $user_id) {
         http_response_code(403); // Forbidden
         throw new Exception("Unauthorized access to this dashboard.");
     }
 
-    // -------------------------------
+    // ------------------------------------
     // Fetch all bookings for the user
-    // -------------------------------
+    // ------------------------------------
     $stmt = $conn->prepare("
         SELECT 
             wb.booking_id,
@@ -149,11 +146,10 @@ try {
     $conn->close();
 
 } catch (Exception $e) {
-    // Note: http_response_code might already be set in nested catches
+    // Ensure proper HTTP code
     if (http_response_code() == 200) http_response_code(400); 
     echo json_encode([
         "success" => false,
         "message" => $e->getMessage()
     ]);
 }
-?>

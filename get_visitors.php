@@ -1,24 +1,35 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database Connection
+// ------------------------------------
+require_once 'db.php';
+
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
-
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-require_once 'db.php';
-
+// ------------------------------------
+// Read Input JSON
+// ------------------------------------
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!$data) {
@@ -26,6 +37,9 @@ if (!$data) {
     exit;
 }
 
+// ------------------------------------
+// JWT VERIFICATION LOGIC
+// ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -46,6 +60,9 @@ try {
     exit;
 }
 
+// ------------------------------------
+// Validate User Identity
+// ------------------------------------
 $user_id = $data['user_id'] ?? null;
 
 if (!$user_id) {
@@ -59,7 +76,9 @@ if ((int)$decoded_user_id !== (int)$user_id) {
     exit;
 }
 
-// ✅ FIXED SELECT: Join specifically on booking_id to prevent duplicates
+// ------------------------------------
+// Fetch Visitors
+// ------------------------------------
 $sql = "
     SELECT DISTINCT
         v.id,
@@ -83,7 +102,6 @@ $sql = "
     ORDER BY v.id DESC
 ";
 
-
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("i", $user_id);
 $stmt->execute();
@@ -100,7 +118,7 @@ while ($row = $result->fetch_assoc()) {
         "workspace"     => $row["host_workspace"] ?: "Manual Entry",
         "visiting_date" => $row["visiting_date"],
         "check_in_time" => $row["check_in_time"],
-        "check_out_time" => $row["check_out_time"],
+        "check_out_time"=> $row["check_out_time"],
         "reason"        => $row["reason"],
         "attendees"     => $row["attendees"],
         "payment_id"    => $row["payment_id"],
@@ -109,6 +127,9 @@ while ($row = $result->fetch_assoc()) {
     ];
 }
 
+// ------------------------------------
+// Return Response
+// ------------------------------------
 if (count($visitors) > 0) {
     echo json_encode(["success" => true, "visitors" => $visitors]);
 } else {

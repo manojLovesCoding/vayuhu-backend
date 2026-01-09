@@ -1,30 +1,33 @@
 <?php
-// -------------------------
-// CORS
-// -------------------------
-$allowed_origin = "http://localhost:5173";
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
 
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database
+// ------------------------------------
+require_once "db.php";
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
-header("Content-Type: application/json; charset=UTF-8");
-
-// ✅ NEW: Include JWT Library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+// ------------------------------------
+// Secret Key from .env
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT Verification
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -45,43 +48,33 @@ try {
     echo json_encode(["success" => false, "message" => "Invalid or expired session. Please log in again."]);
     exit;
 }
-// ------------------------------------
 
-// -------------------------
-// Prevent PHP Warnings from breaking JSON
-// -------------------------
+// ------------------------------------
+// Prevent PHP warnings from breaking JSON
+// ------------------------------------
 ini_set("display_errors", 0);
 error_reporting(E_ALL);
 
-// -------------------------
-// Database Connection
-// -------------------------
-require_once "db.php";
-if (!$conn) {
-    echo json_encode(["success" => false, "message" => "Database connection failed"]);
-    exit;
-}
-
-// -------------------------
+// ------------------------------------
 // Validate Request Method
-// -------------------------
+// ------------------------------------
 if ($_SERVER["REQUEST_METHOD"] !== "POST") {
     echo json_encode(["success" => false, "message" => "Invalid request method"]);
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // Read Input
-// -------------------------
+// ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
 if (!$input) {
     echo json_encode(["success" => false, "message" => "Invalid or missing JSON body"]);
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // Required Fields
-// -------------------------
+// ------------------------------------
 $required = ["coupon_code", "workspace_title", "plan_type", "total_amount"];
 foreach ($required as $r) {
     if (empty($input[$r])) {
@@ -90,9 +83,9 @@ foreach ($required as $r) {
     }
 }
 
-// -------------------------
+// ------------------------------------
 // Sanitize Inputs
-// -------------------------
+// ------------------------------------
 function val($arr, $key) {
     return isset($arr[$key]) && $arr[$key] !== "" ? trim($arr[$key]) : null;
 }
@@ -103,9 +96,9 @@ $workspace_title = val($input, "workspace_title");
 $plan_type       = val($input, "plan_type");
 $total_amount    = floatval(val($input, "total_amount"));
 
-// -------------------------
+// ------------------------------------
 // Fetch Coupon
-// -------------------------
+// ------------------------------------
 $stmt = $conn->prepare("SELECT * FROM coupons WHERE coupon_code = ?");
 $stmt->bind_param("s", $coupon_code);
 $stmt->execute();
@@ -119,18 +112,18 @@ if ($result->num_rows === 0) {
 $coupon = $result->fetch_assoc();
 $stmt->close();
 
-// -------------------------
+// ------------------------------------
 // Validity Period Check
-// -------------------------
+// ------------------------------------
 $today = date("Y-m-d");
 if ($today < $coupon["valid_from"] || $today > $coupon["valid_to"]) {
     echo json_encode(["success" => false, "message" => "Coupon is expired or not active today"]);
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // Price Range Check
-// -------------------------
+// ------------------------------------
 $min_price = floatval($coupon["min_price"] ?? 0);
 $max_price = floatval($coupon["max_price"] ?? 0);
 
@@ -143,18 +136,18 @@ if ($max_price > 0 && $total_amount > $max_price) {
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // Space Type Check
-// -------------------------
+// ------------------------------------
 $space_type = trim($coupon["space_type"]);
 if ($space_type !== "ALL Spaces" && stripos($workspace_title, $space_type) === false) {
     echo json_encode(["success" => false, "message" => "Coupon not valid for this workspace type"]);
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // Normalize Plan/Pack Types
-// -------------------------
+// ------------------------------------
 function normalize_plan($value) {
     $v = strtolower(trim($value));
     $map = [
@@ -175,19 +168,18 @@ function normalize_plan($value) {
 $normalized_pack = normalize_plan($coupon["pack_type"]);
 $normalized_plan = normalize_plan($plan_type);
 
-// -------------------------
-// Pack Type Check (fixed mapping)
-// -------------------------
+// ------------------------------------
+// Pack Type Check
+// ------------------------------------
 if ($normalized_pack !== "all" && $normalized_pack !== $normalized_plan) {
     echo json_encode(["success" => false, "message" => "Coupon not valid for this plan"]);
     exit;
 }
 
-// -------------------------
+// ------------------------------------
 // User Type Validation (optional)
-// -------------------------
-$user_type = trim($coupon["user_type"]);
-if ($user_type === "Particular User (Email)" && !empty($coupon["email"])) {
+# Particular User (Email or Mobile)
+if (trim($coupon["user_type"]) === "Particular User (Email)" && !empty($coupon["email"])) {
     $u_stmt = $conn->prepare("SELECT email FROM users WHERE id = ?");
     $u_stmt->bind_param("i", $user_id);
     $u_stmt->execute();
@@ -201,7 +193,7 @@ if ($user_type === "Particular User (Email)" && !empty($coupon["email"])) {
     }
 }
 
-if ($user_type === "Particular User (Mobile)" && !empty($coupon["mobile"])) {
+if (trim($coupon["user_type"]) === "Particular User (Mobile)" && !empty($coupon["mobile"])) {
     $u_stmt = $conn->prepare("SELECT mobile FROM users WHERE id = ?");
     $u_stmt->bind_param("i", $user_id);
     $u_stmt->execute();
@@ -215,16 +207,16 @@ if ($user_type === "Particular User (Mobile)" && !empty($coupon["mobile"])) {
     }
 }
 
-// -------------------------
+// ------------------------------------
 // Discount Calculation
-// -------------------------
+// ------------------------------------
 $discount_percent = floatval($coupon["discount"]);
 $discount_amount = round(($total_amount * $discount_percent) / 100, 2);
 $new_total = round($total_amount - $discount_amount, 2);
 
-// -------------------------
+// ------------------------------------
 // Success Response
-// -------------------------
+// ------------------------------------
 echo json_encode([
     "success" => true,
     "message" => "Coupon applied successfully! You got {$discount_percent}% off.",

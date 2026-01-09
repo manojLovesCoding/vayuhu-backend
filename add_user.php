@@ -1,31 +1,28 @@
 <?php
-// --- CORS Configuration ---
-$allowed_origin = "http://localhost:5173"; // your React app runs on this port (Vite)
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization"); 
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment Variables & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Database Connection
+// ------------------------------------
+require_once 'db.php'; // your database connection
+if (!$conn) {
+    echo json_encode(["status" => "error", "message" => "Database connection failed"]);
+    exit;
 }
 
-// --- Response Type ---
-header("Content-Type: application/json; charset=UTF-8");
-
-// ✅ NEW: Include JWT Library
+// ------------------------------------
+// JWT Verification
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
-// ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -36,21 +33,24 @@ if (!$authHeader) {
 }
 
 // Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
+if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+    $token = $matches[1];
+} else {
+    $token = $authHeader;
+}
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid; user data is now available in $decoded->data
+    $userData = (array)$decoded->data; // User info from token if needed
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["status" => "error", "message" => "Invalid or expired token"]);
     exit;
 }
 
-// --- Include Database ---
-require_once 'db.php'; // use your db.php file
-
-// --- Get JSON Input ---
+// ------------------------------------
+// Read JSON Input
+// ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
 
 if (!$input) {
@@ -58,18 +58,24 @@ if (!$input) {
     exit;
 }
 
-// --- Extract form data ---
-$name = trim($input["name"] ?? "");
+// ------------------------------------
+// Extract form data
+// ------------------------------------
+$name  = trim($input["name"] ?? "");
 $email = trim($input["email"] ?? "");
 $phone = trim($input["phone"] ?? "");
 
-// --- Validation ---
+// ------------------------------------
+// Validation
+// ------------------------------------
 if (empty($name) || empty($phone)) {
     echo json_encode(["status" => "error", "message" => "Name and phone are required."]);
     exit;
 }
 
-// --- Check duplicate phone ---
+// ------------------------------------
+// Check duplicate phone
+// ------------------------------------
 $checkSql = "SELECT id FROM users WHERE phone = ?";
 $checkStmt = $conn->prepare($checkSql);
 $checkStmt->bind_param("s", $phone);
@@ -84,7 +90,9 @@ if ($checkStmt->num_rows > 0) {
 }
 $checkStmt->close();
 
-// --- Insert new user ---
+// ------------------------------------
+// Insert new user
+// ------------------------------------
 $sql = "INSERT INTO users (name, email, phone, created_at) VALUES (?, ?, ?, NOW())";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("sss", $name, $email, $phone);
@@ -97,4 +105,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

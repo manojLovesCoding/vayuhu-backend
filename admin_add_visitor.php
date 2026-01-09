@@ -1,33 +1,25 @@
 <?php
-// 1. SILENCE HTML ERRORS (Fixes the "<" syntax error)
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
+
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
-ini_set('display_errors', 0); 
 
-// --- CORS Configuration ---
-$allowed_origin = "http://localhost:5173"; 
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json; charset=UTF-8");
-header("Access-Control-Allow-Credentials: true");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-// ✅ Include JWT Library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     // ------------------------------------
-    // ✅ JWT VERIFICATION (ADDED)
+    // JWT VERIFICATION
     // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -37,7 +29,6 @@ try {
         throw new Exception("Authorization header missing.");
     }
 
-    // Extract token from "Bearer <token>"
     $token = str_replace('Bearer ', '', $authHeader);
 
     try {
@@ -48,13 +39,17 @@ try {
         throw new Exception("Invalid or expired token.");
     }
 
-    // 2. CHECK DATABASE CONNECTION
+    // ------------------------------------
+    // CHECK DATABASE CONNECTION
+    // ------------------------------------
     if (!file_exists('db.php')) {
         throw new Exception("db.php file not found!");
     }
     require_once 'db.php';
 
-    // 3. GET INPUT
+    // ------------------------------------
+    // GET INPUT
+    // ------------------------------------
     $input = file_get_contents("php://input");
     $data = json_decode($input, true);
 
@@ -66,56 +61,55 @@ try {
         throw new Exception("Name and Contact are required.");
     }
 
-    // 4. PREPARE VARIABLES
+    // ------------------------------------
+    // PREPARE VARIABLES
+    // ------------------------------------
     $name = $data['name'];
     $contact = $data['contact'];
-    
-    // Handle NULLs for IDs
     $user_id = !empty($data['user_id']) ? $data['user_id'] : null;
     $admin_id = !empty($data['admin_id']) ? $data['admin_id'] : null;
-
     $email = $data['email'] ?? null;
     $company_name = $data['company_name'] ?? null;
     $visiting_date = $data['visiting_date'] ?? null;
-    $check_in_time  = $data['check_in_time'] ?? null;
-$check_out_time = $data['check_out_time'] ?? null;
-
+    $check_in_time = $data['check_in_time'] ?? null;
+    $check_out_time = $data['check_out_time'] ?? null;
     $reason = $data['reason'] ?? null;
 
-    // 5. INSERT QUERY
+    // ------------------------------------
+    // INSERT QUERY
+    // ------------------------------------
     $sql = "INSERT INTO visitors (
-            user_id, 
-            admin_id, 
-            name, 
-            contact_no, 
-            email, 
-            company_name, 
-            visiting_date, 
-            check_in_time, 
-            check_out_time, 
-            reason
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
+                user_id, 
+                admin_id, 
+                name, 
+                contact_no, 
+                email, 
+                company_name, 
+                visiting_date, 
+                check_in_time, 
+                check_out_time, 
+                reason
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     $stmt = $conn->prepare($sql);
-    
-    if(!$stmt) {
+
+    if (!$stmt) {
         throw new Exception("SQL Prepare Failed: " . $conn->error);
     }
 
     $stmt->bind_param(
-    "iissssssss",
-    $user_id,
-    $admin_id,
-    $name,
-    $contact,
-    $email,
-    $company_name,
-    $visiting_date,
-    $check_in_time,
-    $check_out_time,
-    $reason
-);
+        "iissssssss",
+        $user_id,
+        $admin_id,
+        $name,
+        $contact,
+        $email,
+        $company_name,
+        $visiting_date,
+        $check_in_time,
+        $check_out_time,
+        $reason
+    );
 
     if ($stmt->execute()) {
         echo json_encode(["success" => true, "message" => "Visitor added successfully"]);
@@ -127,12 +121,9 @@ $check_out_time = $data['check_out_time'] ?? null;
     $conn->close();
 
 } catch (Exception $e) {
-    // 6. RETURN ERROR AS JSON (Not HTML)
-    // Ensure we send 401 if it was an auth failure, otherwise keep 400 or default
     if (http_response_code() === 200) http_response_code(400);
-
     echo json_encode([
-        "success" => false, 
+        "success" => false,
         "message" => "Server Error: " . $e->getMessage()
     ]);
 }

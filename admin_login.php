@@ -1,35 +1,35 @@
 <?php
-// --- CORS Configuration ---
-$allowed_origin = "http://localhost:5173";
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-// ✅ Added Authorization to allowed headers for future requests
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-// --- Response Type ---
-header("Content-Type: application/json; charset=UTF-8");
-
-// --- Include Database ---
+// ------------------------------------
+// Include Database
+// ------------------------------------
 require_once 'db.php';
 
-// --- Include JWT library ---
+// ------------------------------------
+// Include JWT library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// --- Secret Key ---
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// Secret Key from .env
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// --- Get JSON Input ---
+// ------------------------------------
+// Get JSON Input
+// ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
 
-// --- Validate JSON ---
+// ------------------------------------
+// Validate JSON
+// ------------------------------------
 if (!$input) {
     echo json_encode(["status" => "error", "message" => "Invalid JSON input."]);
     exit;
@@ -38,13 +38,17 @@ if (!$input) {
 $email = trim($input["email"] ?? "");
 $password = $input["password"] ?? "";
 
-// --- Basic Validation ---
+// ------------------------------------
+// Basic Validation
+// ------------------------------------
 if (empty($email) || empty($password)) {
     echo json_encode(["status" => "error", "message" => "Email and password are required."]);
     exit;
 }
 
-// --- Fetch Admin ---
+// ------------------------------------
+// Fetch Admin
+// ------------------------------------
 $sql = "SELECT id, name, email, password, role FROM admins WHERE email = ?";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("s", $email);
@@ -60,7 +64,9 @@ if ($result->num_rows === 0) {
 
 $admin = $result->fetch_assoc();
 
-// --- Verify password ---
+// ------------------------------------
+// Verify password
+// ------------------------------------
 if (!password_verify($password, $admin["password"])) {
     echo json_encode(["status" => "error", "message" => "Incorrect password."]);
     $stmt->close();
@@ -68,29 +74,36 @@ if (!password_verify($password, $admin["password"])) {
     exit;
 }
 
-// --- Remove password ---
+// ------------------------------------
+// Remove password
+// ------------------------------------
 unset($admin["password"]);
 
-// --- Create JWT Payload ---
-
+// ------------------------------------
+// Create JWT Payload
+// ------------------------------------
 $payload = [
     "iss" => "http://localhost/vayuhu_backend",
     "aud" => "http://localhost:5173",
     "iat" => time(),
-    "nbf" => time(), // ✅ Not before (Token is valid immediately)
+    "nbf" => time(),
     "exp" => time() + (60 * 60 * 24), // 24 hours
     "data" => [
         "id" => $admin["id"],
         "name" => $admin["name"],
         "email" => $admin["email"],
-        "role" => $admin["role"] // ✅ Crucial for admin-only middleware
+        "role" => $admin["role"]
     ]
 ];
 
-// --- Generate JWT ---
+// ------------------------------------
+// Generate JWT
+// ------------------------------------
 $jwt = JWT::encode($payload, $secret_key, 'HS256');
 
-// --- Success Response ---
+// ------------------------------------
+// Success Response
+// ------------------------------------
 echo json_encode([
     "status" => "success",
     "message" => "Admin login successful.",

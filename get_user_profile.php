@@ -1,26 +1,23 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-// ✅ Added Authorization to Allowed Headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json");
-
-// Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
 include "db.php";
 
-// ✅ NEW: Include JWT library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 if (!$conn) {
     echo json_encode(["success" => false, "message" => "Database connection failed"]);
@@ -28,7 +25,7 @@ if (!$conn) {
 }
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT VERIFICATION LOGIC
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -52,7 +49,9 @@ try {
 
 $baseURL = "http://localhost/vayuhuBackend"; // change if folder differs
 
-// ✅ Get user id from query string
+// ------------------------------------
+// Get user id from query string
+// ------------------------------------
 if (!isset($_GET['id'])) {
     echo json_encode(["success" => false, "message" => "User ID missing"]);
     exit;
@@ -60,13 +59,18 @@ if (!isset($_GET['id'])) {
 
 $id = intval($_GET['id']);
 
-// ✅ NEW: Security Check - Ensure user can only access their own profile
+// ------------------------------------
+// Security Check - Ensure user can only access their own profile
+// ------------------------------------
 if ((int)$decoded_user_id !== $id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized access to this profile"]);
     exit;
 }
 
+// ------------------------------------
+// Fetch user data
+// ------------------------------------
 $sql = "SELECT id, name, email, phone, dob, address, profile_pic FROM users WHERE id = ? LIMIT 1";
 
 $stmt = $conn->prepare($sql);
@@ -90,4 +94,3 @@ if ($result && $row = $result->fetch_assoc()) {
 
 $stmt->close();
 $conn->close();
-?>

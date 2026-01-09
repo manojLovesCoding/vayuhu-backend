@@ -1,63 +1,56 @@
 <?php
 // ------------------------------------
-// CORS CONFIG
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173";
-
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
-}
-
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
 
 // ------------------------------------
-// ✅ JWT VERIFICATION (ADDED)
-// ------------------------------------
-require_once __DIR__ . '/vendor/autoload.php';
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
-
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match login/signup scripts
-
-// Get Authorization header
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
-    exit;
-}
-
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
-
-try {
-    // Decode and verify the token
-    $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid! Proceeding to fetch data...
-} catch (Exception $e) {
-    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
-    exit;
-}
-
-// ------------------------------------
-// DATABASE CONNECTION
+// Database Connection
 // ------------------------------------
 require_once "db.php";
-
 if (!$conn) {
     echo json_encode(["success" => false, "message" => "Database connection failed"]);
     exit;
 }
 
 // ------------------------------------
-// GET BLOG BY ID
+// Include JWT Library
+// ------------------------------------
+require_once __DIR__ . '/vendor/autoload.php';
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+
+// ------------------------------------
+// Secret Key from .env
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
+// ------------------------------------
+// JWT Verification
+// ------------------------------------
+$headers = getallheaders();
+$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+
+if (!$authHeader) {
+    http_response_code(401);
+    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    exit;
+}
+
+$token = str_replace('Bearer ', '', $authHeader);
+
+try {
+    $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
+    // Token is valid, user info available in $decoded->data
+} catch (Exception $e) {
+    http_response_code(401);
+    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
+    exit;
+}
+
+// ------------------------------------
+// Get Blog by ID
 // ------------------------------------
 $id = isset($_GET['id']) ? intval($_GET['id']) : 0;
 
@@ -66,7 +59,7 @@ if ($id <= 0) {
     exit;
 }
 
-// Using Prepared Statement for extra security
+// Prepared statement for security
 $sql = "SELECT 
             id,
             added_by,
@@ -98,8 +91,13 @@ if ($result->num_rows === 0) {
 $row = $result->fetch_assoc();
 
 // Construct full image URL
-$row["blog_image"] = !empty($row["blog_image"]) ? "http://localhost/vayuhu_backend/" . $row["blog_image"] : null;
+$row["blog_image"] = !empty($row["blog_image"]) 
+    ? "http://localhost/vayuhu_backend/" . $row["blog_image"] 
+    : null;
 
+// ------------------------------------
+// Return JSON Response
+// ------------------------------------
 echo json_encode(["success" => true, "blog" => $row], JSON_UNESCAPED_SLASHES);
 
 $stmt->close();

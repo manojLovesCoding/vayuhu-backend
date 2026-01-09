@@ -2,31 +2,36 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// ------------------
-// CORS HEADERS
-// ------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads env vars (JWT_SECRET)
+require_once __DIR__ . '/config/cors.php';  // centralized CORS + OPTIONS handling
+
+// ------------------------------------
+// Response type
+// ------------------------------------
 header("Content-Type: application/json; charset=UTF-8");
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// ------------------------------------
+// Database connection
+// ------------------------------------
+include "db.php";
 
+// ------------------------------------
 // JWT library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // must match login key
+// ✅ JWT secret from environment
+$secret_key = $_ENV['JWT_SECRET'];
 
 try {
-    include "db.php";
-
-    // Get token
+    // ------------------------------------
+    // Get token from headers
+    // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -37,7 +42,9 @@ try {
 
     $token = str_replace('Bearer ', '', $authHeader);
 
-    // Decode token
+    // ------------------------------------
+    // Decode JWT
+    // ------------------------------------
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
 
     // Only admin can access
@@ -46,11 +53,15 @@ try {
         throw new Exception("Unauthorized: Admins only.");
     }
 
+    // ------------------------------------
     // Get user_id from query
+    // ------------------------------------
     $user_id = $_GET['user_id'] ?? null;
     if (!$user_id) throw new Exception("user_id is required.");
 
-    // Fetch company profile for given user
+    // ------------------------------------
+    // Fetch company profile
+    // ------------------------------------
     $sql = "SELECT * FROM company_profile WHERE user_id = ?";
     $stmt = $conn->prepare($sql);
     $stmt->bind_param("i", $user_id);
@@ -59,7 +70,7 @@ try {
 
     if ($result && $result->num_rows > 0) {
         $profile = $result->fetch_assoc();
-        // Fix logo URL
+        // Fix logo URL for frontend
         if ($profile['logo']) {
             $profile['logo'] = "http://localhost/vayuhuBackend/" . $profile['logo'];
         }

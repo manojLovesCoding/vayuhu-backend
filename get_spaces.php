@@ -1,10 +1,18 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads environment variables (JWT secret available if needed)
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
+
+// ------------------------------------
+// Response Type
+// ------------------------------------
 header("Content-Type: application/json");
 
+// ------------------------------------
+// Database
+// ------------------------------------
 require_once "db.php";
 
 if (!$conn) {
@@ -45,16 +53,11 @@ if ($result && $result->num_rows > 0) {
             $row[$k] = $v ?? "";
         }
 
-       if (!empty($row["image"])) {
-    /**
-     * Since your 'image' column stores 'uploads/spaces/filename.jpg',
-     * and your file structure is VAYUHU_BACKEND -> uploads -> spaces,
-     * you should prepend the base URL to the stored path.
-     */
-    $row["image_url"] = $baseURL . "/" . $row["image"];
-} else {
-    $row["image_url"] = "";
-}
+        if (!empty($row["image"])) {
+            $row["image_url"] = $baseURL . "/" . $row["image"];
+        } else {
+            $row["image_url"] = "";
+        }
 
         $spaceId = (int)$row["id"];
         $currentSpaceCode = $row["space_code"];

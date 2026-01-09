@@ -1,27 +1,27 @@
 <?php
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
+
+// ------------------------------------
+// Error Handling
+// ------------------------------------
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
-
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 header("Content-Type: application/json; charset=UTF-8");
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
+// ------------------------------------
+// JWT VERIFICATION
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
-
-    // ---------------- JWT VERIFICATION ----------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -38,8 +38,11 @@ try {
         http_response_code(401);
         throw new Exception("Invalid or expired token. Please log in again.");
     }
-    // --------------------------------------------------
+    // Token verified. User info in $decoded->data
 
+    // ------------------------------------
+    // Database
+    // ------------------------------------
     include 'db.php';
 
     $data = json_decode(file_get_contents("php://input"), true);
@@ -65,8 +68,9 @@ try {
     if ($start_time && strlen($start_time) === 5) $start_time .= ":00";
     if ($end_time && strlen($end_time) === 5) $end_time .= ":00";
 
-    // ---------------- EXISTING BOOKINGS CHECK ----------------
-    // ❗ REMOVED LIMIT 1 (IMPORTANT)
+    // ------------------------------------
+    // EXISTING BOOKINGS CHECK
+    // ------------------------------------
     $stmt = $conn->prepare("
         SELECT plan_type, start_date, end_date, start_time, end_time
         FROM workspace_bookings
@@ -91,17 +95,13 @@ try {
     $stmt->execute();
     $result = $stmt->get_result();
 
-    // ---------------- CONFLICT FOUND ----------------
     if ($result && $result->num_rows > 0) {
-
-        // ✅ NEW: detect full-day blocking (daily/monthly)
         $hasFullDayBlock = false;
         $blockedEndDate = null;
-
         $conflicts = [];
+
         while ($row = $result->fetch_assoc()) {
             $conflicts[] = $row;
-
             if (in_array($row['plan_type'], ['daily', 'monthly'])) {
                 if ($start_date >= $row['start_date'] && $start_date <= $row['end_date']) {
                     $hasFullDayBlock = true;
@@ -110,17 +110,10 @@ try {
                 }
             }
         }
-
         $stmt->close();
 
-        // ---------------- FULL DATE BLOCKED ----------------
-        // ✅ NEW: return available DATE instead of time slots
         if ($hasFullDayBlock) {
-            $nextAvailableDate = date(
-                'Y-m-d',
-                strtotime($blockedEndDate . ' +1 day')
-            );
-
+            $nextAvailableDate = date('Y-m-d', strtotime($blockedEndDate . ' +1 day'));
             echo json_encode([
                 "success" => false,
                 "message" => "This workspace is fully booked for the selected date.",
@@ -131,10 +124,7 @@ try {
             exit;
         }
 
-        // ---------------- HOURLY CONFLICT (TIME BASED) ----------------
-        // 🔵 YOUR EXISTING LOGIC – UNCHANGED
         if ($plan_type === 'hourly') {
-
             $bookStmt = $conn->prepare("
                 SELECT start_time, end_time
                 FROM workspace_bookings
@@ -148,16 +138,12 @@ try {
 
             $bookedRanges = [];
             while ($row = $bookings->fetch_assoc()) {
-                $bookedRanges[] = [
-                    'start' => $row['start_time'],
-                    'end'   => $row['end_time']
-                ];
+                $bookedRanges[] = ['start' => $row['start_time'], 'end' => $row['end_time']];
             }
             $bookStmt->close();
 
             $openingHour = 8;
             $closingHour = 19;
-
             $availableSlots = [];
 
             for ($hour = $openingHour; $hour <= $closingHour; $hour++) {
@@ -187,24 +173,24 @@ try {
             exit;
         }
 
-        // ---------------- DAILY / MONTHLY CONFLICT ----------------
+        // DAILY / MONTHLY CONFLICT
         echo json_encode([
             "success" => false,
             "message" => "This workspace is already booked for the selected time/date."
         ]);
         exit;
     }
-
     $stmt->close();
 
-    // ---------------- NO CONFLICT ----------------
+    // ------------------------------------
+    // NO CONFLICT
+    // ------------------------------------
     echo json_encode([
         "success" => true,
         "message" => "Workspace available for booking."
     ]);
 
 } catch (Exception $e) {
-
     $statusCode = (
         $e->getCode() === 401 ||
         stripos($e->getMessage(), 'token') !== false

@@ -2,33 +2,37 @@
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-// ------------------
-// CORS HEADERS
-// ------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database Connection
+// ------------------------------------
+include "db.php";
+
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
-// ✅ NEW: Include JWT library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
-    include "db.php";
-
     // ------------------------------------
-    // ✅ NEW: JWT VERIFICATION LOGIC
+    // JWT VERIFICATION LOGIC
     // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -48,7 +52,9 @@ try {
         throw new Exception("Invalid or expired token.");
     }
 
-    // Read request body
+    // ------------------------------------
+    // Read Request Body
+    // ------------------------------------
     $raw = file_get_contents("php://input");
     $data = json_decode($raw, true);
 
@@ -61,14 +67,15 @@ try {
         throw new Exception("Invalid user_id.");
     }
 
-    // ✅ NEW: SECURITY CHECK - Compare token ID with request ID
+    // ✅ SECURITY CHECK - Compare token ID with request ID
     if ((int)$decoded_user_id !== $user_id) {
         http_response_code(403);
         throw new Exception("Unauthorized: Identity mismatch.");
     }
 
-    // Fetch bookings
-    // 🟢 UPDATED SELECT: Added `wb.seat_codes` to the list
+    // ------------------------------------
+    // Fetch Workspace Bookings
+    // ------------------------------------
     $stmt = $conn->prepare("
         SELECT 
             wb.booking_id,
@@ -118,7 +125,7 @@ try {
             $row['end_time'] = date("h:i A", strtotime($row['end_time']));
         }
 
-        // Optionally format dates as well (e.g., Nov 27, 2025)
+        // Format dates as "Nov 27, 2025"
         $row['start_date'] = date("M d, Y", strtotime($row['start_date']));
         $row['end_date']   = date("M d, Y", strtotime($row['end_date']));
 
@@ -134,7 +141,6 @@ try {
     $conn->close();
 
 } catch (Exception $e) {
-    // If status code hasn't been set by auth logic, default to 400
     if (http_response_code() == 200) {
         http_response_code(400);
     }
@@ -143,4 +149,3 @@ try {
         "message" => $e->getMessage()
     ]);
 }
-?>

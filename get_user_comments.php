@@ -1,27 +1,30 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-header("Access-Control-Allow-Credentials: true");
-
-include "db.php";
-
-// Handle CORS preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads env vars (JWT_SECRET)
+require_once __DIR__ . '/config/cors.php';  // centralized CORS + OPTIONS handling
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// Response Type
+// ------------------------------------
+header("Content-Type: application/json");
+
+// ------------------------------------
+// Database
+// ------------------------------------
+include "db.php";
+
+// ------------------------------------
+// JWT VERIFICATION LOGIC
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+// ✅ JWT secret from environment
+$secret_key = $_ENV['JWT_SECRET'];
+
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -36,14 +39,16 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid; user data is available in $decoded->data if needed
+    // Token is valid; user data available in $decoded->data if needed
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
-// ------------------------------------
 
+// ------------------------------------
+// Business Logic (UNCHANGED)
+// ------------------------------------
 $user_id = isset($_GET['user_id']) ? intval($_GET['user_id']) : 0;
 
 if ($user_id <= 0) {
@@ -73,4 +78,3 @@ echo json_encode(["success" => true, "comments" => $comments]);
 
 $stmt->close();
 $conn->close();
-?>

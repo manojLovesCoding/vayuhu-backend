@@ -1,27 +1,36 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); // ✅ Added for secure communication
-header("Content-Type: application/json; charset=UTF-8");
+// -------------------------
+// Load Environment & CORS
+// -------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Centralized CORS headers & OPTIONS handling
 
-// Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// -------------------------
+// Prevent PHP warnings from breaking JSON
+// -------------------------
+ini_set('display_errors', 0);
+error_reporting(E_ALL);
 
+// -------------------------
+// Database
+// -------------------------
 require_once 'db.php';
 
-// ✅ NEW: Include JWT library
+// -------------------------
+// JWT Library
+// -------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: JWT Secret Key
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// -------------------------
+// Use JWT secret from .env
+// -------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// ✅ NEW: Get & Verify Token
+// -------------------------
+// JWT Verification
+// -------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -31,50 +40,60 @@ if (!$authHeader) {
     exit;
 }
 
-$token = str_replace('Bearer ', '', $authHeader);
+// Extract token
+if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+    $token = $matches[1];
+} else {
+    $token = $authHeader;
+}
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; // Extract user ID from token
+    $decoded_user_id = $decoded->data->id ?? null;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
-// Ensure user_id is provided
+// -------------------------
+// Ensure user_id matches token
+// -------------------------
 $user_id = $_POST['user_id'] ?? null;
 if (!$user_id) {
     echo json_encode(["success" => false, "message" => "User ID required"]);
     exit;
 }
 
-// ✅ NEW: Security check - Token ID must match the POST user_id
 if ((int)$decoded_user_id !== (int)$user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized: Identity mismatch."]);
     exit;
 }
 
-// Collect form data
+// -------------------------
+// Collect & validate form data
+// -------------------------
 $companyName = trim($_POST['companyName'] ?? "");
 $gstNo       = trim($_POST['gstNo'] ?? "");
 $email       = trim($_POST['email'] ?? "");
 $contact     = trim($_POST['contact'] ?? "");
 $address     = trim($_POST['address'] ?? "");
 
-// Validation
 if (empty($companyName) || empty($email) || empty($contact)) {
     echo json_encode(["success" => false, "message" => "Company Name, Email, and Contact are required"]);
     exit;
 }
 
-// Check if profile already exists
+// -------------------------
+// Check for existing profile
+// -------------------------
 $checkSql = "SELECT id FROM company_profile WHERE user_id = ?";
 $checkStmt = $conn->prepare($checkSql);
 $checkStmt->bind_param("i", $user_id);
 $checkStmt->execute();
 $checkStmt->store_result();
+
 if ($checkStmt->num_rows > 0) {
     echo json_encode(["success" => false, "message" => "Company profile already exists"]);
     $checkStmt->close();
@@ -83,7 +102,9 @@ if ($checkStmt->num_rows > 0) {
 }
 $checkStmt->close();
 
+// -------------------------
 // Handle logo upload
+// -------------------------
 $logoPath = null;
 if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
     $uploadDir = __DIR__ . "/uploads/company_logos/";
@@ -99,7 +120,9 @@ if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
     }
 }
 
+// -------------------------
 // Insert new profile
+// -------------------------
 $sql = "INSERT INTO company_profile (user_id, company_name, gst_no, email, contact, address, logo, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("issssss", $user_id, $companyName, $gstNo, $email, $contact, $address, $logoPath);

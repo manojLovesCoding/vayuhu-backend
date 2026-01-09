@@ -1,27 +1,30 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); // ✅ Added for secure sessions
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
-// Handle preflight request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
+// ------------------------------------
+// DATABASE CONNECTION
+// ------------------------------------
 require_once 'db.php';
 
-// ✅ NEW: Include JWT library
+// ------------------------------------
+// ✅ INCLUDE JWT LIBRARY
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: JWT Secret Key
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// ✅ JWT SECRET FROM ENV
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// ✅ NEW: Get & Verify Token
+// ------------------------------------
+// ✅ GET & VERIFY JWT
+// ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -35,21 +38,23 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; // Extract user ID from token
+    $decoded_user_id = $decoded->data->id;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
-// Ensure user_id is provided
+// ------------------------------------
+// VALIDATE INPUT
+// ------------------------------------
 $user_id = $_POST['user_id'] ?? null;
 if (!$user_id) {
     echo json_encode(["success" => false, "message" => "User ID required"]);
     exit;
 }
 
-// ✅ NEW: Cross-check token ID with requested User ID
+// ✅ SECURITY CHECK: Token user ID vs Request user ID
 if ((int)$decoded_user_id !== (int)$user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized: User ID mismatch."]);
@@ -65,7 +70,9 @@ $address     = trim($_POST['address'] ?? "");
 // Optional: email should not be updated
 $email       = trim($_POST['email'] ?? "");
 
-// Handle logo upload
+// ------------------------------------
+// HANDLE LOGO UPLOAD
+// ------------------------------------
 $logoPath = null;
 if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
     $uploadDir = __DIR__ . "/uploads/company_logos/";
@@ -81,7 +88,9 @@ if (isset($_FILES['logo']) && $_FILES['logo']['error'] === UPLOAD_ERR_OK) {
     }
 }
 
-// Build SQL dynamically
+// ------------------------------------
+// BUILD SQL
+// ------------------------------------
 $sql = "UPDATE company_profile SET company_name=?, gst_no=?, contact=?, address=?";
 $params = [$companyName, $gstNo, $contact, $address];
 $types = "ssss";
@@ -96,7 +105,9 @@ $sql .= " WHERE user_id=?";
 $params[] = $user_id;
 $types .= "i";
 
-// Execute update
+// ------------------------------------
+// EXECUTE UPDATE
+// ------------------------------------
 $stmt = $conn->prepare($sql);
 $stmt->bind_param($types, ...$params);
 
@@ -114,4 +125,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

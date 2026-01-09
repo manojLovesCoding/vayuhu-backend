@@ -1,42 +1,31 @@
 <?php
 // ------------------------------------
-// CORS CONFIG
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173";
-
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-
-// Handle preflight
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
-}
-
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
 
 // ------------------------------------
-// ERROR HANDLING
+// Error Handling
 // ------------------------------------
 ini_set("display_errors", 0);
 error_reporting(E_ALL);
 
 // ------------------------------------
-// ✅ JWT VERIFICATION (ADDED)
+// JWT VERIFICATION
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match login.php
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // Get Authorization header
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
 if (!$authHeader) {
+    http_response_code(401);
     echo json_encode(["success" => false, "message" => "Authorization header missing"]);
     exit;
 }
@@ -45,16 +34,16 @@ if (!$authHeader) {
 $token = str_replace('Bearer ', '', $authHeader);
 
 try {
-    // Decode and verify the token
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid, we can proceed. User data is in $decoded->data
+    // Token is valid. User info is available in $decoded->data
 } catch (Exception $e) {
+    http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
 // ------------------------------------
-// DATABASE CONNECTION
+// Database Connection
 // ------------------------------------
 require_once "db.php";
 
@@ -64,7 +53,7 @@ if (!$conn) {
 }
 
 // ------------------------------------
-// FETCH BLOGS
+// Fetch Blogs
 // ------------------------------------
 $sql = "SELECT 
             id, 
@@ -94,7 +83,7 @@ while ($row = $result->fetch_assoc()) {
     // Convert empty image to null
     $row["blog_image"] = !empty($row["blog_image"]) ? $row["blog_image"] : null;
 
-    // Format dates (optional)
+    // Keep date fields (optional formatting)
     $row["created_at"] = $row["created_at"] ?? null;
     $row["updated_at"] = $row["updated_at"] ?? null;
 
@@ -102,7 +91,7 @@ while ($row = $result->fetch_assoc()) {
 }
 
 // ------------------------------------
-// AUTO-ROTATE BLOG ORDER DAILY
+// Auto-Rotate Blog Order Daily
 // ------------------------------------
 $totalBlogs = count($blogs);
 
@@ -117,7 +106,7 @@ if ($totalBlogs > 0) {
 }
 
 // ------------------------------------
-// RESPONSE
+// Response
 // ------------------------------------
 echo json_encode([
     "success" => true,

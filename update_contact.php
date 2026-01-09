@@ -1,34 +1,29 @@
 <?php
 // ------------------------------------
-// CORS Configuration
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173"; // Update when deployed
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
 // ------------------------------------
-// Response Type
+// DATABASE CONNECTION
 // ------------------------------------
-header("Content-Type: application/json; charset=UTF-8");
+require_once 'db.php';
 
-// ✅ NEW: Include JWT Library
+// ------------------------------------
+// ✅ INCLUDE JWT LIBRARY
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// ✅ JWT SECRET FROM ENV
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// ✅ GET & VERIFY JWT
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -44,7 +39,7 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Successfully verified. User data is in $decoded->data
+    $decoded_user_id = $decoded->data->id; // Use if you want to validate user permissions
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -52,15 +47,9 @@ try {
 }
 
 // ------------------------------------
-// Include Database
-// ------------------------------------
-require_once 'db.php';
-
-// ------------------------------------
 // Read JSON Input
 // ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
-
 if (!$input) {
     echo json_encode(["success" => false, "message" => "Invalid input data."]);
     exit;
@@ -134,4 +123,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

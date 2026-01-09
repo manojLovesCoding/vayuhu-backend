@@ -1,19 +1,9 @@
 <?php
 // -------------------------
-// CORS
+// Load Environment & CORS
 // -------------------------
-$allowed_origin = "http://localhost:5173";
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization"); 
-header("Access-Control-Allow-Credentials: true");
-
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
-}
-
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS preflight and headers
 
 // -------------------------
 // Prevent PHP warnings from breaking JSON
@@ -28,11 +18,11 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the same secret key used in login/signup
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ✅ Use secret from .env
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // -------------------------
-// ✅ Verify JWT Token (Enhanced Extraction)
+// ✅ Verify JWT Token
 // -------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -43,17 +33,15 @@ if (!$authHeader) {
     exit;
 }
 
-// Handle "Bearer <token>" format
 if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
     $token = $matches[1];
 } else {
-    // Fallback if "Bearer" prefix is missing
-    $token = $authHeader; 
+    $token = $authHeader; // fallback
 }
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $userData = (array)$decoded->data; // successfully verified user info
+    $userData = (array)$decoded->data;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token: " . $e->getMessage()]);
@@ -61,7 +49,7 @@ try {
 }
 
 // -------------------------
-// Database
+// Database Connection
 // -------------------------
 require_once "db.php";
 if (!$conn) {
@@ -114,10 +102,7 @@ $chk->execute();
 $chk->store_result();
 
 if ($chk->num_rows > 0) {
-    echo json_encode([
-        "success" => false,
-        "message" => "Blog heading already exists"
-    ]);
+    echo json_encode(["success" => false, "message" => "Blog heading already exists"]);
     exit;
 }
 $chk->close();
@@ -152,21 +137,12 @@ if (function_exists('finfo_open')) {
     }
 }
 
-if ($mime === null || $mime === false) {
-    $gs = @getimagesize($fileTmp);
-    if ($gs && isset($gs['mime'])) {
-        $mime = $gs['mime'];
-    }
-}
-
-if ($mime === null || $mime === false) {
-    $mime = isset($_FILES["blog_image"]["type"]) ? $_FILES["blog_image"]["type"] : null;
-}
-
 if (!$mime) {
-    echo json_encode(["success" => false, "message" => "Unable to determine uploaded file type"]);
-    exit;
+    $gs = @getimagesize($fileTmp);
+    if ($gs && isset($gs['mime'])) $mime = $gs['mime'];
 }
+
+if (!$mime) $mime = $_FILES["blog_image"]["type"] ?? null;
 
 $allowed = [
     "image/jpeg", "image/pjpeg", "image/jpg",
@@ -230,4 +206,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

@@ -1,21 +1,9 @@
 <?php
 // ------------------------------------
-// CORS CONFIG
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173";
-
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-
-// Handle preflight
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
-}
-
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // sets CORS headers & handles OPTIONS requests
 
 // ------------------------------------
 // ERROR HANDLING
@@ -30,8 +18,10 @@ require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the same secret key used in login/signup
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// ✅ JWT SECRET FROM ENV
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
 // ✅ VERIFY JWT TOKEN
@@ -45,7 +35,6 @@ if (!$authHeader) {
     exit;
 }
 
-// Extract token from "Bearer <token>"
 $token = str_replace('Bearer ', '', $authHeader);
 
 try {
@@ -134,4 +123,3 @@ if ($conn->query($sql)) {
 }
 
 $conn->close();
-?>

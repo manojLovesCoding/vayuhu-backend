@@ -1,36 +1,35 @@
 <?php
 // ------------------------------------
-// CORS Configuration
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173"; // update for production
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database Connection
+// ------------------------------------
+require_once "db.php"; // must define $conn (mysqli)
+
+if (!$conn) {
+    echo json_encode(["status" => "error", "message" => "Database connection failed"]);
+    exit;
 }
 
 // ------------------------------------
-// Response Type
+// Include JWT Library
 // ------------------------------------
-header("Content-Type: application/json; charset=UTF-8");
-
-// ✅ NEW: Include JWT Library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT VERIFICATION LOGIC
 // ------------------------------------
-
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -51,11 +50,6 @@ try {
     echo json_encode(["status" => "error", "message" => "Invalid or expired token"]);
     exit;
 }
-
-// ------------------------------------
-// Include Database Connection
-// ------------------------------------
-require_once "db.php"; // must define $conn (mysqli)
 
 // ====================================
 // UPDATE ENQUIRY STATUS (POST)
@@ -83,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $allowedStatuses = ["New", "Follow-Up", "Ongoing", "Closed", "Pending"]; // Added 'Pending' based on your React UI
+    $allowedStatuses = ["New", "Follow-Up", "Ongoing", "Closed", "Pending"]; // added 'Pending'
 
     if (!in_array($status, $allowedStatuses)) {
         echo json_encode([
@@ -153,4 +147,3 @@ if ($result && $result->num_rows > 0) {
 echo json_encode($enquiries);
 
 $conn->close();
-?>

@@ -1,26 +1,27 @@
 <?php
-// add_bulk_bookings.php
+// -------------------------
+// Load Environment & CORS
+// -------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS preflight and headers
 
-ini_set('display_errors', 1);
+// -------------------------
+// Prevent PHP warnings from breaking JSON
+// -------------------------
+ini_set('display_errors', 0);
 error_reporting(E_ALL);
 
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Content-Type: application/json; charset=UTF-8");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
+// -------------------------
+// JWT Library
+// -------------------------
 require_once __DIR__ . '/vendor/autoload.php';
-
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// -------------------------
+// Use secret from .env
+// -------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     $headers = getallheaders();
@@ -31,17 +32,29 @@ try {
         throw new Exception("Authorization header missing.");
     }
 
-    $token = str_replace('Bearer ', '', $authHeader);
+    // Extract token from "Bearer <token>" or fallback
+    if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+        $token = $matches[1];
+    } else {
+        $token = $authHeader;
+    }
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
+        $userData = (array)$decoded->data;
     } catch (Exception $e) {
         http_response_code(401);
         throw new Exception("Invalid or expired token.");
     }
 
+    // -------------------------
+    // Database Connection
+    // -------------------------
     include 'db.php';
 
+    // -------------------------
+    // Parse JSON input
+    // -------------------------
     $inputData = json_decode(file_get_contents("php://input"), true);
     if (json_last_error() !== JSON_ERROR_NONE) throw new Exception("Invalid JSON payload.");
 
@@ -82,13 +95,10 @@ try {
         $num_attendees   = (int)($data['num_attendees'] ?? 1);
         $price_per_unit  = (float)($data['price_per_unit'] ?? 0);
 
-        // These are now populated by the breakdown logic in React
         $base_amount     = round((float)($data['base_amount'] ?? 0));
         $gst_amount      = round((float)($data['gst_amount'] ?? 0));
         $discount_amount = round((float)($data['discount_amount'] ?? 0));
         $final_amount    = round((float)($data['final_amount'] ?? 0));
-
-
 
         $coupon_code     = trim($data['coupon_code'] ?? '');
         $referral_source = trim($data['referral_source'] ?? '');
@@ -180,6 +190,7 @@ try {
         "message" => "All bookings confirmed successfully.",
         "booking_ids" => $responseIds
     ]);
+
 } catch (Exception $e) {
     if (isset($conn) && $conn instanceof mysqli && $conn->connect_errno == 0) {
         $conn->rollback();

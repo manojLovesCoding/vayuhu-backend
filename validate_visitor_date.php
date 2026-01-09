@@ -1,22 +1,24 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json; charset=UTF-8");
+// -----------------------------------
+// Load Environment & Centralized CORS
+// -----------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
+// -----------------------------------
+// JWT Verification
+// -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
 require_once 'db.php';
 
+// -----------------------------------
+// Read JSON input
+// -----------------------------------
 $data = json_decode(file_get_contents("php://input"), true);
 if (!$data) {
     echo json_encode(["success" => false, "message" => "Invalid request"]);
@@ -57,13 +59,14 @@ if (!$user_id || !$booking_id || !$visitingDate) {
     exit;
 }
 
+// ---------------- SECURITY CHECK ----------------
 if ((int)$user_id !== (int)$decoded_user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Identity mismatch"]);
     exit;
 }
 
-// ---------------- SUCCESS (no booking validation anymore) ----------------
+// ---------------- SUCCESS ----------------
 echo json_encode([
     "success" => true,
     "message" => "Visiting date is valid"

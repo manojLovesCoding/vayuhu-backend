@@ -1,35 +1,28 @@
 <?php
 // ------------------------------------
-// CORS Configuration
+// Load Environment & Centralized CORS
 // ------------------------------------
-$allowed_origin = "http://localhost:5173"; // Update for live domain
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database Connection
+// ------------------------------------
+require_once "db.php"; // must return $conn (mysqli)
+if (!$conn) {
+    echo json_encode(["status" => "error", "message" => "Database connection failed"]);
+    exit;
 }
 
 // ------------------------------------
-// Response Type
+// JWT Verification (Optional for Enquiries)
 // ------------------------------------
-header("Content-Type: application/json; charset=UTF-8");
-
-// ✅ NEW: Include JWT Library
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC (Optional for Enquiries)
-// ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -45,11 +38,6 @@ if ($authHeader) {
         exit;
     }
 }
-
-// ------------------------------------
-// Include Database Connection
-// ------------------------------------
-require_once "db.php"; // must return $conn (mysqli)
 
 // ------------------------------------
 // Get JSON Input

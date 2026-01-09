@@ -1,29 +1,19 @@
 <?php
 // -----------------------------------
-// CORS + Headers
+// Load Environment & Centralized CORS
 // -----------------------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-header("Access-Control-Allow-Credentials: true");
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
 // -----------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// ✅ JWT VERIFICATION
 // -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
-
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -33,12 +23,11 @@ if (!$authHeader) {
     exit;
 }
 
-// Extract token from "Bearer <token>"
 $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid; you can access $decoded->data if needed
+    // Access token data: $decoded->data
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["status" => "error", "message" => "Invalid or expired token"]);
@@ -50,12 +39,15 @@ try {
 // -----------------------------------
 include "db.php";
 
-$data = json_decode(file_get_contents("php://input"), true);
-
 if (!$conn) {
     echo json_encode(["status" => "error", "message" => "Database connection failed"]);
     exit;
 }
+
+// -----------------------------------
+// Read JSON Input
+// -----------------------------------
+$data = json_decode(file_get_contents("php://input"), true);
 
 if (
     empty($data['id']) ||
@@ -69,14 +61,16 @@ if (
     exit;
 }
 
-$id = $conn->real_escape_string($data['id']);
+$id           = $conn->real_escape_string($data['id']);
 $min_duration = $conn->real_escape_string($data['min_duration']);
 $max_duration = $conn->real_escape_string($data['max_duration']);
-$price = $conn->real_escape_string($data['price']);
-$gst = $conn->real_escape_string($data['gst']);
-$status = $conn->real_escape_string($data['status']);
+$price        = $conn->real_escape_string($data['price']);
+$gst          = $conn->real_escape_string($data['gst']);
+$status       = $conn->real_escape_string($data['status']);
 
-/* ✅ GST VALIDATION (ADD HERE) */
+// -----------------------------------
+// ✅ GST Validation
+// -----------------------------------
 if ($gst < 0 || $gst > 28) {
     echo json_encode([
         "status" => "error",
@@ -85,6 +79,9 @@ if ($gst < 0 || $gst > 28) {
     exit;
 }
 
+// -----------------------------------
+// Update Query
+// -----------------------------------
 $sql = "UPDATE virtualoffice_prices 
         SET min_duration='$min_duration', 
             max_duration='$max_duration', 
@@ -92,7 +89,6 @@ $sql = "UPDATE virtualoffice_prices
             gst='$gst',
             status='$status'
         WHERE id='$id'";
-
 
 if ($conn->query($sql)) {
     echo json_encode(["status" => "success", "message" => "Record updated successfully."]);

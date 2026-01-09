@@ -1,29 +1,23 @@
 <?php
 // ------------------------------------
-// CORS & HEADERS
+// Load Environment & Centralized CORS
 // ------------------------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json; charset=UTF-8");
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-// Handle preflight
-if ($_SERVER["REQUEST_METHOD"] === "OPTIONS") {
-    http_response_code(200);
-    exit();
-}
-
+// ------------------------------------
+// Database Connection
+// ------------------------------------
 include "db.php";
 
 // ------------------------------------
-// ✅ JWT VERIFICATION (ADDED)
+// JWT VERIFICATION
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login/signup key
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // Get Authorization header
 $headers = getallheaders();
@@ -35,13 +29,12 @@ if (!$authHeader) {
     exit;
 }
 
-// Extract token from "Bearer <token>"
+// Extract token
 $token = str_replace('Bearer ', '', $authHeader);
 
 try {
-    // Decode and verify the token
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $decoded_user_id = $decoded->data->id; // Extract user ID from token
+    $decoded_user_id = $decoded->data->id;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -51,7 +44,6 @@ try {
 // ------------------------------------
 // FETCH PROFILE LOGIC
 // ------------------------------------
-// Get user_id from query
 $user_id = $_GET['user_id'] ?? null;
 
 if (!$user_id) {
@@ -59,7 +51,7 @@ if (!$user_id) {
     exit;
 }
 
-// ✅ SECURITY CHECK: Ensure the token owner is only accessing their own profile
+// Security check
 if ((int)$decoded_user_id !== (int)$user_id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized access to this profile."]);
@@ -76,7 +68,6 @@ $result = $stmt->get_result();
 if ($result && $result->num_rows > 0) {
     $profile = $result->fetch_assoc();
 
-    // Fix logo URL for frontend
     if ($profile['logo']) {
         $profile['logo'] = "http://localhost/vayuhuBackend/" . $profile['logo'];
     }
@@ -88,4 +79,3 @@ if ($result && $result->num_rows > 0) {
 
 $stmt->close();
 $conn->close();
-?>

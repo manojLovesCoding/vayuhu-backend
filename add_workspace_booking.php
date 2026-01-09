@@ -1,29 +1,25 @@
 <?php
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
+
 ini_set('display_errors', 1);
 error_reporting(E_ALL);
 
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Credentials: true");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
-header("Content-Type: application/json; charset=UTF-8");
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
-
-// ✅ NEW: Include JWT Library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     // ------------------------------------
-    // ✅ NEW: JWT VERIFICATION LOGIC
+    // JWT VERIFICATION
     // ------------------------------------
     $headers = getallheaders();
     $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -43,8 +39,8 @@ try {
         http_response_code(401);
         throw new Exception("Invalid or expired token. Please log in again.");
     }
-    // ------------------------------------
 
+    // ------------------------------------
     include 'db.php';
 
     $data = json_decode(file_get_contents("php://input"), true);
@@ -54,9 +50,8 @@ try {
     $user_id         = (int)($data['user_id'] ?? 0);
     $space_id        = (int)($data['space_id'] ?? 0);
 
-    // 🟢 NEW: Capture seat codes array or string. Frontend might send 'selected_codes' or 'seat_codes'
+    // Capture seat codes array or string
     $seat_codes_raw  = $data['selected_codes'] ?? $data['seat_codes'] ?? '';
-    // Ensure it's a string. If array, join it.
     $seat_codes      = is_array($seat_codes_raw) ? implode(", ", $seat_codes_raw) : trim($seat_codes_raw);
 
     $workspace_title = trim($data['workspace_title'] ?? '');
@@ -113,7 +108,7 @@ try {
     if ($stmt->num_rows === 0) throw new Exception("Invalid space_id: space not found.");
     $stmt->close();
 
-    // --- Check for booking conflicts (hourly/daily/monthly) ---
+    // --- Check for booking conflicts ---
     $stmt = $conn->prepare("
         SELECT plan_type, start_date, end_date, start_time, end_time
         FROM workspace_bookings
@@ -143,8 +138,7 @@ try {
 
     // --- Insert booking as pending ---
     $status = 'pending';
-    
-    // 🟢 UPDATED QUERY: Added `seat_codes` column
+
     $stmt = $conn->prepare("
         INSERT INTO workspace_bookings (
             booking_id, user_id, space_id, seat_codes, workspace_title, plan_type,
@@ -154,8 +148,7 @@ try {
             coupon_code, referral_source, terms_accepted, status
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ");
-    
-    // 🟢 UPDATED BIND: Added 's' to types string (4th char) and `$seat_codes` variable
+
     $stmt->bind_param(
         "siisssssssiidddddssiss",
         $booking_id, $user_id, $space_id, $seat_codes, $workspace_title, $plan_type,
@@ -164,6 +157,7 @@ try {
         $price_per_unit, $base_amount, $gst_amount, $discount_amount, $final_amount,
         $coupon_code, $referral_source, $terms_accepted, $status
     );
+
     if (!$stmt->execute()) throw new Exception("Could not save booking. " . $stmt->error);
     $stmt->close();
 
@@ -186,8 +180,7 @@ try {
     ]);
 
 } catch (Exception $e) {
-    // Set 401 for Auth errors, otherwise 400
-    $code = ($e->getMessage() === "Authorization header missing. Please log in." || strpos($e->getMessage(), "token") !== false) ? 401 : 400;
+    $code = (strpos($e->getMessage(), "token") !== false || strpos($e->getMessage(), "Authorization") !== false) ? 401 : 400;
     http_response_code($code);
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }

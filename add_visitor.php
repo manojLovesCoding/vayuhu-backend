@@ -1,22 +1,27 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+// ------------------------------------
+// Include Database Connection
+// ------------------------------------
+require_once 'db.php';
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
+// ------------------------------------
+// JWT Verification
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
-
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
-require_once 'db.php';
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // Get JSON input
 $data = json_decode(file_get_contents("php://input"), true);
@@ -91,8 +96,6 @@ $amount_paid   = (float)($data['amount_paid'] ?? 0);
 // 🧠 Debug log
 error_log("DEBUG: Received payment_id = " . $payment_id);
 
-
-
 // ---------------- BASIC VALIDATION ----------------
 if (empty($name) || empty($contact)) {
     echo json_encode(["success" => false, "message" => "Name and Contact No are required"]);
@@ -124,7 +127,7 @@ $stmt->bind_param(
     $checkOutTime,   // s
     $reason,         // s
     $attendees,      // i
-    $payment_id,     // s ✅ must be a string
+    $payment_id,     // s
     $amount_paid     // d
 );
 
@@ -146,3 +149,4 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
+?>

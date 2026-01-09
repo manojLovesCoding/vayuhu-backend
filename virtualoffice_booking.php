@@ -1,30 +1,21 @@
 <?php
 // virtualoffice_booking.php
 
-// -----------------------------
-// CORS + Headers
-// -----------------------------
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-header("Access-Control-Allow-Credentials: true");
-
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// -----------------------------------
+// Load Environment & Centralized CORS
+// -----------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
 // -----------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT Verification
 // -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -46,9 +37,9 @@ try {
     exit;
 }
 
-// -----------------------------
+// -----------------------------------
 // DB Connection
-// -----------------------------
+// -----------------------------------
 include "db.php";
 
 if (!$conn) {
@@ -56,25 +47,25 @@ if (!$conn) {
     exit;
 }
 
-// -----------------------------
+// -----------------------------------
 // Parse Input
-// -----------------------------
+// -----------------------------------
 $data = json_decode(file_get_contents("php://input"), true);
 
 $user_id     = $conn->real_escape_string($data['user_id'] ?? '');
 $check_only  = $data['check_only'] ?? false; // 👈 NEW FLAG
 
-// -----------------------------
+// -----------------------------------
 // Validation (Common for both modes)
-// -----------------------------
+// -----------------------------------
 if (empty($user_id)) {
     echo json_encode(["success" => false, "message" => "User ID is required."]);
     exit;
 }
 
-// -----------------------------
+// -----------------------------------
 // 1️⃣ CHECK: Does user already have an active booking?
-// -----------------------------
+// -----------------------------------
 $checkSql = "SELECT id FROM virtualoffice_bookings 
               WHERE user_id = '$user_id' 
               AND status = 'Active' 
@@ -84,7 +75,6 @@ $checkSql = "SELECT id FROM virtualoffice_bookings
 $checkResult = $conn->query($checkSql);
 
 if ($checkResult && $checkResult->num_rows > 0) {
-    // If found, they cannot book again.
     echo json_encode([
         "success" => false, 
         "message" => "You already have an active booking."
@@ -93,11 +83,10 @@ if ($checkResult && $checkResult->num_rows > 0) {
     exit;
 }
 
-// -----------------------------
+// -----------------------------------
 // 🛑 STOP HERE IF "CHECK ONLY" MODE
-// -----------------------------
+// -----------------------------------
 if ($check_only) {
-    // If we reached here, it means no duplicate was found. User is safe to proceed.
     echo json_encode([
         "success" => true, 
         "message" => "User is eligible to book."
@@ -106,10 +95,9 @@ if ($check_only) {
     exit;
 }
 
-// =================================================================
+// -----------------------------------
 // ⬇️ BOOKING LOGIC (Only runs if check_only is FALSE)
-// =================================================================
-
+// -----------------------------------
 $start_date     = $conn->real_escape_string($data['start_date'] ?? '');
 $end_date       = $conn->real_escape_string($data['end_date'] ?? '');
 $price          = $conn->real_escape_string($data['price'] ?? '');
@@ -148,4 +136,3 @@ if ($conn->query($sql)) {
 }
 
 $conn->close();
-?>

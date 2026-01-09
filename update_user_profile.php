@@ -1,27 +1,33 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true"); // ✅ Added for secure sessions
-header("Content-Type: application/json; charset=UTF-8");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
+// ------------------------------------
+// Database connection
+// ------------------------------------
 include "db.php";
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
+}
 
-// ✅ NEW: Include JWT library
+// ------------------------------------
+// ✅ Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ NEW: Define secret key (Must match your login/signup script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
-
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+// ------------------------------------
+// ✅ JWT SECRET FROM ENV
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// ✅ JWT Verification
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -43,14 +49,17 @@ try {
     exit;
 }
 
+// ------------------------------------
+// Validate POST
+// ------------------------------------
 if (!isset($_POST['id'])) {
     echo json_encode(["success" => false, "message" => "User ID missing"]);
     exit;
 }
 
-$id      = intval($_POST['id']);
+$id = intval($_POST['id']);
 
-// ✅ NEW: SECURITY CHECK - Ensure the token owner matches the ID being updated
+// ✅ SECURITY CHECK - Ensure token owner matches ID
 if ((int)$decoded_user_id !== $id) {
     http_response_code(403);
     echo json_encode(["success" => false, "message" => "Unauthorized: You cannot update this profile"]);
@@ -68,7 +77,9 @@ if (empty($id) || empty($name) || empty($phone)) {
     exit;
 }
 
+// ------------------------------------
 // Handle profile picture upload
+// ------------------------------------
 $profile_pic_path = null;
 if (isset($_FILES['profilePic']) && $_FILES['profilePic']['error'] === UPLOAD_ERR_OK) {
     $upload_dir = __DIR__ . "/uploads/profile_pics/";
@@ -83,7 +94,9 @@ if (isset($_FILES['profilePic']) && $_FILES['profilePic']['error'] === UPLOAD_ER
     }
 }
 
-// ✅ Build query WITHOUT email field
+// ------------------------------------
+// Build and execute update query
+// ------------------------------------
 if ($profile_pic_path) {
     $sql = "UPDATE users 
             SET name=?, phone=?, dob=?, address=?, profile_pic=? 
@@ -107,4 +120,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

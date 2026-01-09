@@ -1,27 +1,28 @@
 <?php
-header("Access-Control-Allow-Origin: *");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Centralized CORS headers & OPTIONS handling
 
+// ------------------------------------
+// Database Connection
+// ------------------------------------
 include "db.php"; // ✅ Use your actual DB file name
-
-// Handle CORS preflight
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
 }
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT Verification
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your login script
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
@@ -32,22 +33,32 @@ if (!$authHeader) {
 }
 
 // Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
+if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
+    $token = $matches[1];
+} else {
+    $token = $authHeader;
+}
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid; user context is available in $decoded->data
+    $userData = (array)$decoded->data; // User info
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
-// ------------------------------------
 
-// Read input
+// ------------------------------------
+// Read Input
+// ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
 
-if (!$input || !isset($input['user_id']) || !isset($input['status']) || !isset($input['comment'])) {
+if (
+    !$input ||
+    !isset($input['user_id']) ||
+    !isset($input['status']) ||
+    !isset($input['comment'])
+) {
     echo json_encode(["success" => false, "message" => "Invalid input"]);
     exit;
 }
@@ -58,7 +69,9 @@ $comment = trim($input['comment']);
 $follow_up_date = !empty($input['follow_up_date']) ? $input['follow_up_date'] : null;
 $follow_up_time = !empty($input['follow_up_time']) ? $input['follow_up_time'] : null;
 
-// ✅ 1. Insert into user_comments
+// ------------------------------------
+// Insert into user_comments
+// ------------------------------------
 $sql = "INSERT INTO user_comments (user_id, status, comment, follow_up_date, follow_up_time, created_at)
         VALUES (?, ?, ?, ?, ?, NOW())";
 $stmt = $conn->prepare($sql);
@@ -71,7 +84,9 @@ if (!$stmt) {
 $stmt->bind_param("issss", $user_id, $status, $comment, $follow_up_date, $follow_up_time);
 
 if ($stmt->execute()) {
-    // ✅ 2. Update user status in users table
+    // ------------------------------------
+    // Update user status in users table
+    // ------------------------------------
     $update = $conn->prepare("UPDATE users SET status = ? WHERE id = ?");
     $update->bind_param("si", $status, $user_id);
     $update->execute();
@@ -84,4 +99,3 @@ if ($stmt->execute()) {
 
 $stmt->close();
 $conn->close();
-?>

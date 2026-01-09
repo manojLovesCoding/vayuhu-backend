@@ -1,27 +1,33 @@
 <?php
-header("Access-Control-Allow-Origin: http://localhost:5173");
-header("Access-Control-Allow-Methods: GET, POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Content-Type: application/json");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
 
-// Handle preflight OPTIONS request
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit();
-}
+include "db.php";
 
-// ✅ NEW: Include JWT Library
+// ------------------------------------
+// Include JWT Library
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-// ✅ Define the secret key (must match your login script)
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS";
+// ------------------------------------
+// JWT Secret
+// ------------------------------------
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
+
+if (!$conn) {
+    echo json_encode(["success" => false, "message" => "Database connection failed"]);
+    exit;
+}
+
+$baseURL = "http://localhost/vayuhuBackend"; // adjust if folder name differs
 
 // ------------------------------------
-// ✅ NEW: JWT VERIFICATION LOGIC
+// JWT VERIFICATION LOGIC
 // ------------------------------------
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -44,16 +50,9 @@ try {
     exit;
 }
 
-include "db.php";
-
-if (!$conn) {
-    echo json_encode(["success" => false, "message" => "Database connection failed"]);
-    exit;
-}
-
-$baseURL = "http://localhost/vayuhuBackend"; // adjust if folder name differs
-
-// Remove 'comments' column from SQL
+// ------------------------------------
+// Fetch all users
+// ------------------------------------
 $sql = "SELECT 
             id, 
             name, 
@@ -93,4 +92,3 @@ if ($result && $result->num_rows > 0) {
 }
 
 $conn->close();
-?>

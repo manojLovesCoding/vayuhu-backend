@@ -1,35 +1,24 @@
 <?php
-// -------------------------
-// CORS
-// -------------------------
-$allowed_origin = "http://localhost:5173";
-header("Access-Control-Allow-Origin: $allowed_origin");
-header("Access-Control-Allow-Methods: POST, OPTIONS");
-// ✅ Added Authorization to allowed headers
-header("Access-Control-Allow-Headers: Content-Type, Authorization");
-header("Access-Control-Allow-Credentials: true");
+// ------------------------------------
+// Load Environment & Centralized CORS
+// ------------------------------------
+require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
 
-if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') {
-    http_response_code(200);
-    exit;
-}
-
-header("Content-Type: application/json; charset=UTF-8");
-
-// -------------------------
-// Prevent PHP Warnings from breaking JSON
-// -------------------------
+// ------------------------------------
+// Error Handling
+// ------------------------------------
 ini_set("display_errors", 0);
 error_reporting(E_ALL);
 
-// -------------------------
-// ✅ JWT VERIFICATION (ADDED)
-// -------------------------
+// ------------------------------------
+// JWT VERIFICATION
+// ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
-$secret_key = "VAYUHU_SECRET_KEY_CHANGE_THIS"; // Must match your other scripts
+$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
@@ -44,24 +33,25 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Successfully verified
+    // Token verified. User info in $decoded->data
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
-// -------------------------
-// Database
-// -------------------------
+// ------------------------------------
+// Database Connection
+// ------------------------------------
 require_once "db.php";
 if (!$conn) {
     echo json_encode(['success' => false, 'message' => 'Database connection failed']);
     exit;
 }
 
-// Read JSON body or POST form (for image)
-// ADDED: support FormData (image upload)
+// ------------------------------------
+// Read Input (supports JSON body or FormData for image upload)
+// ------------------------------------
 $body = json_decode(file_get_contents('php://input'), true);
 $group = trim($_POST['group'] ?? $body['group'] ?? '');
 $defaults = json_decode($_POST['defaults'] ?? '{}', true);
@@ -71,7 +61,9 @@ if (!$group) {
     exit;
 }
 
-// Mapping - keep synced with frontend
+// ------------------------------------
+// Mapping groups
+// ------------------------------------
 $groups = [
     "Workspace" => ['prefix' => 'WS', 'max' => 45],
     "Team Leads Cubicle" => ['prefix' => 'TLC', 'max' => 4],
@@ -89,7 +81,7 @@ if (!isset($groups[$group])) {
 $prefix = $groups[$group]['prefix'];
 $max = (int)$groups[$group]['max'];
 
-// Fetch existing codes efficiently
+// Fetch existing codes
 $stmt = $conn->prepare("SELECT space_code FROM spaces WHERE space_code LIKE CONCAT(?, '%')");
 $stmt->bind_param("s", $prefix);
 $stmt->execute();
@@ -97,7 +89,7 @@ $res = $stmt->get_result();
 $existing = array_column($res->fetch_all(MYSQLI_ASSOC), 'space_code');
 $stmt->close();
 
-// Generate all desired codes
+// Generate desired codes
 $allDesired = [];
 for ($i = 1; $i <= $max; $i++) {
     $allDesired[] = $prefix . str_pad($i, 2, "0", STR_PAD_LEFT);
@@ -118,7 +110,7 @@ if (empty($toCreate)) {
     exit;
 }
 
-// ADDED: handle uploaded image
+// Handle uploaded image (optional)
 $imagePath = '';
 if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
     $tmp = $_FILES['image']['tmp_name'];
@@ -130,7 +122,9 @@ if (isset($_FILES['image']) && $_FILES['image']['error'] === UPLOAD_ERR_OK) {
     $imagePath = 'uploads/' . $imageName;
 }
 
-// Insert with prepared statement and transaction
+// ------------------------------------
+// Insert codes with transaction
+// ------------------------------------
 $conn->begin_transaction();
 $created = [];
 $error = null;
@@ -138,6 +132,7 @@ $error = null;
 $insertSql = "INSERT INTO spaces
     (space_code, space, per_hour, per_day, one_week, two_weeks, three_weeks, per_month, min_duration, min_duration_desc, max_duration, max_duration_desc, image, status, created_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())";
+
 $stmtInsert = $conn->prepare($insertSql);
 
 if (!$stmtInsert) {
@@ -145,11 +140,8 @@ if (!$stmtInsert) {
     exit;
 }
 
-// Insert minimal defaults
 foreach ($toCreate as $code) {
     $spaceName = $group; // can be "Workspace" or "Workspace - WS01"
-
-    // ADDED: use defaults from frontend
     $values = [
         $code,
         $spaceName,
@@ -167,7 +159,6 @@ foreach ($toCreate as $code) {
         "Active"
     ];
 
-    // Bind and execute
     if (!$stmtInsert->bind_param(str_repeat("s", count($values)), ...$values)) {
         $error = "Bind failed: " . $stmtInsert->error;
         break;
