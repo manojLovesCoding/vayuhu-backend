@@ -74,43 +74,29 @@ try {
     $check_in_time = $data['check_in_time'] ?? null;
     $check_out_time = $data['check_out_time'] ?? null;
     $reason = $data['reason'] ?? null;
+    // ✅ Integrated Amount Paid (Defaults to 0.00 if empty)
+    $amount_paid = !empty($data['amount_paid']) ? (float)$data['amount_paid'] : 0.00;
+    $attendees = !empty($data['attendees']) ? (int)$data['attendees'] : 1; // ✅ New Variable
 
     // ------------------------------------
     // INSERT QUERY
     // ------------------------------------
-    $sql = "INSERT INTO visitors (
-                user_id, 
-                admin_id, 
-                name, 
-                contact_no, 
-                email, 
-                company_name, 
-                visiting_date, 
-                check_in_time, 
-                check_out_time, 
-                reason
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    // ... inside INSERT QUERY ...
+$sql = "INSERT INTO visitors (
+            user_id, admin_id, name, contact_no, email, 
+            company_name, visiting_date, check_in_time, 
+            check_out_time, reason, amount_paid, attendees
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    $stmt = $conn->prepare($sql);
+$stmt = $conn->prepare($sql);
 
-    if (!$stmt) {
-        throw new Exception("SQL Prepare Failed: " . $conn->error);
-    }
-
-    $stmt->bind_param(
-        "iissssssss",
-        $user_id,
-        $admin_id,
-        $name,
-        $contact,
-        $email,
-        $company_name,
-        $visiting_date,
-        $check_in_time,
-        $check_out_time,
-        $reason
-    );
-
+// Added "i" at the end for the integer (attendees)
+$stmt->bind_param(
+    "iissssssssdi", 
+    $user_id, $admin_id, $name, $contact, $email, 
+    $company_name, $visiting_date, $check_in_time, 
+    $check_out_time, $reason, $amount_paid, $attendees
+);
     if ($stmt->execute()) {
         echo json_encode(["success" => true, "message" => "Visitor added successfully"]);
     } else {

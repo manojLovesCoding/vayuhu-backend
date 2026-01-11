@@ -34,7 +34,6 @@ $token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Successfully verified. User info is in $decoded->data
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -50,27 +49,28 @@ require_once 'db.php';
 // Query Visitors
 // ------------------------------------
 $sql = "
-   SELECT 
-    v.id,
-    v.user_id,
-    v.admin_id,
-    v.company_id,
-    v.name,
-    v.contact_no,
-    v.email,
-    v.company_name,
-    v.visiting_date,
-    v.check_in_time,
-    v.check_out_time,  v.amount_paid,
-    v.reason,  
-  
-    v.added_on,
-    u.name AS user_name,
-    a.name AS admin_name
-FROM visitors v
-LEFT JOIN users u ON v.user_id = u.id
-LEFT JOIN admins a ON v.admin_id = a.id
-ORDER BY v.added_on DESC
+    SELECT 
+        v.id,
+        v.user_id,
+        v.admin_id,
+        v.company_id,
+        v.name,
+        v.contact_no,
+        v.email,
+        v.company_name,
+        v.visiting_date,
+        v.check_in_time,
+        v.check_out_time,
+        v.amount_paid,
+        v.attendees,  -- ✅ Added Attendees column
+        v.reason,  
+        v.added_on,
+        u.name AS user_name,
+        a.name AS admin_name
+    FROM visitors v
+    LEFT JOIN users u ON v.user_id = u.id
+    LEFT JOIN admins a ON v.admin_id = a.id
+    ORDER BY v.added_on DESC
 ";
 
 $result = $conn->query($sql);
@@ -103,9 +103,9 @@ while ($row = $result->fetch_assoc()) {
         "visiting_date" => $row['visiting_date'],
         "check_in_time" => $row['check_in_time'],
         "check_out_time" => $row['check_out_time'],
-     
         "amount_paid" => $row['amount_paid'],
-   "reason" => $row['reason'],
+        "attendees" => (int)($row['attendees'] ?? 1), // ✅ Included in Response
+        "reason" => $row['reason'],
         "added_on" => $row['added_on'],
         "user_name" => $added_by_name
     ];
@@ -117,3 +117,4 @@ echo json_encode([
 ]);
 
 $conn->close();
+?>
