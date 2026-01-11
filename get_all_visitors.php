@@ -14,6 +14,7 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 // Include JWT Library
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -60,8 +61,9 @@ $sql = "
     v.company_name,
     v.visiting_date,
     v.check_in_time,
-    v.check_out_time,
-    v.reason,
+    v.check_out_time,  v.amount_paid,
+    v.reason,  
+  
     v.added_on,
     u.name AS user_name,
     a.name AS admin_name
@@ -101,7 +103,9 @@ while ($row = $result->fetch_assoc()) {
         "visiting_date" => $row['visiting_date'],
         "check_in_time" => $row['check_in_time'],
         "check_out_time" => $row['check_out_time'],
-        "reason" => $row['reason'],
+     
+        "amount_paid" => $row['amount_paid'],
+   "reason" => $row['reason'],
         "added_on" => $row['added_on'],
         "user_name" => $added_by_name
     ];
