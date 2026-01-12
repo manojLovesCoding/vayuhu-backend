@@ -62,7 +62,7 @@ $sql = "
         v.check_in_time,
         v.check_out_time,
         v.amount_paid,
-        v.attendees,  -- ✅ Added Attendees column
+        v.attendees,
         v.reason,  
         v.added_on,
         u.name AS user_name,
@@ -85,11 +85,32 @@ if (!$result) {
 
 $visitors = [];
 while ($row = $result->fetch_assoc()) {
-    $added_by_name = "Unknown";
+    // --- Logic for "Added By" (Handling Multiple Slots in Same Row) ---
+    
+    // 1. Determine the first person who registered the visitor
+    $first_adder = "Unknown";
     if (!empty($row['user_name'])) {
-        $added_by_name = $row['user_name']; // Added by Staff
+        $first_adder = $row['user_name']; // Staff member
     } elseif (!empty($row['admin_name'])) {
-        $added_by_name = $row['admin_name'] . " (Admin)"; // Added by Admin
+        $first_adder = $row['admin_name'] . " (Admin)"; // Admin
+    }
+
+    // 2. Align user names with stacked slots (Check-In/Payment)
+    // We split by '|' to match the stacked layout in React
+    $check_in_str = (string)$row['check_in_time'];
+    
+    if (strpos($check_in_str, '|') !== false) {
+        $slots = explode('|', $check_in_str);
+        $slots_count = count($slots);
+        
+        // Build the stacked user string: e.g., "Staff Name | Admin | Admin"
+        $name_parts = [$first_adder];
+        for ($i = 1; $i < $slots_count; $i++) {
+            $name_parts[] = "Admin"; // Subsequent hourly extensions are via Admin
+        }
+        $final_added_by = implode(' | ', $name_parts);
+    } else {
+        $final_added_by = $first_adder;
     }
 
     $visitors[] = [
@@ -104,10 +125,10 @@ while ($row = $result->fetch_assoc()) {
         "check_in_time" => $row['check_in_time'],
         "check_out_time" => $row['check_out_time'],
         "amount_paid" => $row['amount_paid'],
-        "attendees" => (int)($row['attendees'] ?? 1), // ✅ Included in Response
+        "attendees" => (int)($row['attendees'] ?? 1),
         "reason" => $row['reason'],
         "added_on" => $row['added_on'],
-        "user_name" => $added_by_name
+        "user_name" => $final_added_by // Formatted for renderStackedCell
     ];
 }
 
