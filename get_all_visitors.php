@@ -50,27 +50,32 @@ require_once 'db.php';
 // ------------------------------------
 $sql = "
     SELECT 
-        v.id,
-        v.user_id,
-        v.admin_id,
-        v.company_id,
-        v.name,
-        v.contact_no,
-        v.email,
-        v.company_name,
-        v.visiting_date,
-        v.check_in_time,
-        v.check_out_time,
-        v.amount_paid,
-        v.attendees,
-        v.reason,  
-        v.added_on,
-        u.name AS user_name,
-        a.name AS admin_name
-    FROM visitors v
-    LEFT JOIN users u ON v.user_id = u.id
-    LEFT JOIN admins a ON v.admin_id = a.id
-    ORDER BY v.added_on DESC
+    v.id,
+    v.user_id,
+    v.admin_id,
+    v.company_id,
+    v.booking_id,
+    s.space_code,
+    v.name,
+    v.contact_no,
+    v.email,
+    v.company_name,
+    v.visiting_date,
+    v.check_in_time,
+    v.check_out_time,
+    v.amount_paid,
+    v.attendees,
+    v.reason,
+    v.added_on,
+    u.name AS user_name,
+    a.name AS admin_name
+FROM visitors v
+LEFT JOIN users u ON v.user_id = u.id
+LEFT JOIN admins a ON v.admin_id = a.id
+LEFT JOIN workspace_bookings wb ON v.booking_id = wb.booking_id
+LEFT JOIN spaces s ON wb.space_id = s.id
+ORDER BY v.added_on DESC
+
 ";
 
 $result = $conn->query($sql);
@@ -117,6 +122,7 @@ while ($row = $result->fetch_assoc()) {
         "id" => (int)$row['id'],
         "user_id" => $row['user_id'] ? (int)$row['user_id'] : null,
         "company_id" => $row['company_id'] ? (int)$row['company_id'] : null,
+        "space_code" => $row['space_code'] ?? null, // ✅ REQUIRED
         "name" => $row['name'],
         "contact" => $row['contact_no'],
         "email" => $row['email'],

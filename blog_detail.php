@@ -92,7 +92,7 @@ $row = $result->fetch_assoc();
 
 // Construct full image URL
 $row["blog_image"] = !empty($row["blog_image"]) 
-    ? "http://localhost/vayuhu_backend/" . $row["blog_image"] 
+    ? "http://localhost/vayuhuBackend/" . $row["blog_image"] 
     : null;
 
 // ------------------------------------

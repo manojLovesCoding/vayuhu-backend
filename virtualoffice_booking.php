@@ -11,6 +11,7 @@ require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIO
 // JWT Verification
 // -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -76,7 +77,7 @@ $checkResult = $conn->query($checkSql);
 
 if ($checkResult && $checkResult->num_rows > 0) {
     echo json_encode([
-        "success" => false, 
+        "success" => false,
         "message" => "You already have an active booking."
     ]);
     $conn->close();
@@ -84,16 +85,32 @@ if ($checkResult && $checkResult->num_rows > 0) {
 }
 
 // -----------------------------------
-// 🛑 STOP HERE IF "CHECK ONLY" MODE
+// 🛑 CHECK ONLY MODE (Eligibility + Active Plan)
 // -----------------------------------
+
+// Check active plan exists
+$priceQuery = "SELECT id FROM virtualoffice_prices WHERE status='Active' LIMIT 1";
+$priceResult = $conn->query($priceQuery);
+
+if (!$priceResult || $priceResult->num_rows === 0) {
+    echo json_encode([
+        "success" => false,
+        "message" => "No active plan configuration found."
+    ]);
+    $conn->close();
+    exit;
+}
+
+// If everything is OK
 if ($check_only) {
     echo json_encode([
-        "success" => true, 
+        "success" => true,
         "message" => "User is eligible to book."
     ]);
     $conn->close();
     exit;
 }
+
 
 // -----------------------------------
 // ⬇️ BOOKING LOGIC (Only runs if check_only is FALSE)
@@ -122,6 +139,29 @@ if ($priceResult && $priceResult->num_rows > 0) {
     $conn->close();
     exit;
 }
+
+// -----------------------------------
+// Backend Duration Validation (11 Months)
+// -----------------------------------
+$start = new DateTime($start_date);
+$expectedEnd = (clone $start)->modify('+11 months');
+
+$actualEnd = new DateTime($end_date);
+
+// Normalize time
+$start->setTime(0, 0, 0);
+$expectedEnd->setTime(0, 0, 0);
+$actualEnd->setTime(0, 0, 0);
+
+if ($actualEnd != $expectedEnd) {
+    echo json_encode([
+        "success" => false,
+        "message" => "Invalid booking duration. Virtual Office duration must be 11 months."
+    ]);
+    $conn->close();
+    exit;
+}
+
 
 // Insert Booking
 $sql = "INSERT INTO virtualoffice_bookings 
