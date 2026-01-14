@@ -24,16 +24,13 @@ try {
     include "db.php";
 
     // ------------------------------------
-    // JWT VERIFICATION
+    // JWT VERIFICATION from HttpOnly cookie
     // ------------------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-    if (!$authHeader) {
-        throw new Exception("Authorization header missing.");
+    if (!isset($_COOKIE['auth_token'])) {
+        throw new Exception("Authentication token missing.");
     }
 
-    $token = str_replace('Bearer ', '', $authHeader);
+    $token = $_COOKIE['auth_token'];
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -146,7 +143,6 @@ try {
     $conn->close();
 
 } catch (Exception $e) {
-    // Ensure proper HTTP code
     if (http_response_code() == 200) http_response_code(400); 
     echo json_encode([
         "success" => false,

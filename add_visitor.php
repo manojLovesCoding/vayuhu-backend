@@ -25,23 +25,20 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // Get JSON input
 $data = json_decode(file_get_contents("php://input"), true);
-
 if (!$data) {
     echo json_encode(["success" => false, "message" => "Invalid request data"]);
     exit;
 }
 
 // ---------------- JWT VERIFICATION ----------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// Read JWT exclusively from HttpOnly cookie
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authorization token missing"]);
     exit;
 }
-
-$token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -112,7 +109,6 @@ $sql = "INSERT INTO visitors (
 $stmt = $conn->prepare($sql);
 
 // 🟢 Correct bind_param type string
-// i = int, s = string, d = double
 $stmt->bind_param(
     "iissssssssssid",
     $user_id,        // i

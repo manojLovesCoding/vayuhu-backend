@@ -20,17 +20,22 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
+// ---------------- JWT CHECK ----------------
+// Read JWT from HttpOnly cookie
+$token = $_COOKIE['auth_token'] ?? null;
+
+// Fallback (optional): check Authorization header for backward compatibility
 $headers = getallheaders();
 $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
-    http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
-    exit;
+if (!$token && $authHeader) {
+    $token = str_replace('Bearer ', '', $authHeader);
 }
 
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
+if (!$token) {
+    http_response_code(401);
+    echo json_encode(["success" => false, "message" => "Authorization missing"]);
+    exit;
+}
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));

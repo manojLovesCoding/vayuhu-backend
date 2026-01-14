@@ -23,6 +23,11 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
+// Set JSON response header
+// ------------------------------------
+header("Content-Type: application/json; charset=UTF-8");
+
+// ------------------------------------
 // Get JSON Input
 // ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
@@ -31,6 +36,7 @@ $input = json_decode(file_get_contents("php://input"), true);
 // Validate JSON
 // ------------------------------------
 if (!$input) {
+    http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Invalid JSON input."]);
     exit;
 }
@@ -42,6 +48,7 @@ $password = $input["password"] ?? "";
 // Basic Validation
 // ------------------------------------
 if (empty($email) || empty($password)) {
+    http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Email and password are required."]);
     exit;
 }
@@ -55,20 +62,17 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $result = $stmt->get_result();
 
-if ($result->num_rows === 0) {
-    echo json_encode(["status" => "error", "message" => "No admin account found with this email."]);
-    $stmt->close();
-    $conn->close();
-    exit;
-}
-
 $admin = $result->fetch_assoc();
 
 // ------------------------------------
-// Verify password
+// Verify password & prevent enumeration
 // ------------------------------------
-if (!password_verify($password, $admin["password"])) {
-    echo json_encode(["status" => "error", "message" => "Incorrect password."]);
+if (!$admin || !password_verify($password, $admin["password"])) {
+    http_response_code(401);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid email or password."
+    ]);
     $stmt->close();
     $conn->close();
     exit;
@@ -102,13 +106,27 @@ $payload = [
 $jwt = JWT::encode($payload, $secret_key, 'HS256');
 
 // ------------------------------------
+// Store JWT in HttpOnly cookie
+// ------------------------------------
+setcookie(
+    "auth_token",
+    $jwt,
+    [
+        "expires"  => time() + (60 * 60 * 24), // 24 hours
+        "path"     => "/",
+        "secure"   => false,   // ⚠️ Set to TRUE in production with HTTPS
+        "httponly" => true,
+        "samesite" => "Lax"
+    ]
+);
+
+// ------------------------------------
 // Success Response
 // ------------------------------------
 echo json_encode([
     "status" => "success",
     "message" => "Admin login successful.",
-    "admin" => $admin,
-    "token" => $jwt
+    "admin" => $admin
 ]);
 
 $stmt->close();

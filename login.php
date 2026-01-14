@@ -5,18 +5,18 @@ require_once __DIR__ . '/vendor/autoload.php';
 require_once 'db.php';
 
 use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
 
-
+// Set JSON response header
+header("Content-Type: application/json; charset=UTF-8");
 
 $secret_key = $_ENV['JWT_SECRET'];
-
 
 // --- Get JSON Input ---
 $input = json_decode(file_get_contents("php://input"), true);
 
 // --- Validate JSON Input ---
 if (!$input) {
+    http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Invalid JSON input."]);
     exit;
 }
@@ -26,6 +26,7 @@ $password = $input["password"] ?? "";
 
 // --- Basic Validation ---
 if (empty($email) || empty($password)) {
+    http_response_code(400);
     echo json_encode(["status" => "error", "message" => "Email and password are required."]);
     exit;
 }
@@ -37,10 +38,13 @@ $stmt->bind_param("s", $email);
 $stmt->execute();
 $result = $stmt->get_result();
 
+// --- Prevent user enumeration ---
 if ($result->num_rows === 0) {
-    echo json_encode(["status" => "error", "message" => "No account found with this email."]);
-    $stmt->close();
-    $conn->close();
+    http_response_code(401);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid email or password."
+    ]);
     exit;
 }
 
@@ -48,21 +52,24 @@ $user = $result->fetch_assoc();
 
 // --- Verify password ---
 if (!password_verify($password, $user["password"])) {
-    echo json_encode(["status" => "error", "message" => "Incorrect password."]);
-    $stmt->close();
-    $conn->close();
+    http_response_code(401);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid email or password."
+    ]);
     exit;
 }
 
 // --- Login successful ---
 unset($user["password"]); // remove password from response
 
-// ✅ NEW: Create JWT payload
+// --- Create JWT payload ---
 $payload = [
     "iss" => "http://localhost/vayuhu_backend",
     "aud" => "http://localhost:5173",
     "iat" => time(),
-    "exp" => time() + (60 * 60 * 24), // expires in 24 hours
+    "nbf" => time(),
+    "exp" => time() + (60 * 60 * 24), // 24 hours
     "data" => [
         "id" => $user["id"],
         "name" => $user["name"],
@@ -70,17 +77,28 @@ $payload = [
     ]
 ];
 
-// ✅ NEW: Generate JWT
+// --- Generate JWT ---
 $jwt = JWT::encode($payload, $secret_key, 'HS256');
 
-// ✅ NEW: Return token with response
+// --- Store JWT in HttpOnly cookie ---
+setcookie(
+    "auth_token",
+    $jwt,
+    [
+        "expires"  => time() + (60 * 60 * 24),
+        "path"     => "/",
+        "secure"   => false, // ⚠️ set to TRUE in HTTPS
+        "httponly" => true,
+        "samesite" => "Lax"
+    ]
+);
+
+// --- Send response (NO TOKEN) ---
 echo json_encode([
     "status" => "success",
     "message" => "Login successful.",
-    "user" => $user,
-    "token" => $jwt // send token to frontend
+    "user" => $user
 ]);
 
 $stmt->close();
 $conn->close();
-?>

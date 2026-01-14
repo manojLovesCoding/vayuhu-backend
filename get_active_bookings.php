@@ -16,19 +16,20 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 require_once 'db.php';
 
 // ------------------------------------
-// Get JSON input & headers
+// Get JSON input
 // ------------------------------------
 $data = json_decode(file_get_contents("php://input"), true);
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
 
-if (!$authHeader) {
+// ------------------------------------
+// Get JWT from HttpOnly cookie
+// ------------------------------------
+if (!isset($_COOKIE['auth_token'])) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Authorization missing"]);
     exit;
 }
 
-$token = str_replace('Bearer ', '', $authHeader);
+$token = $_COOKIE['auth_token'];
 
 // ------------------------------------
 // JWT verification

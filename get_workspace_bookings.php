@@ -5,8 +5,8 @@ error_reporting(E_ALL);
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // Include Database Connection
@@ -32,17 +32,14 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     // ------------------------------------
-    // JWT VERIFICATION LOGIC
+    // ✅ JWT VERIFICATION FROM COOKIE
     // ------------------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-    if (!$authHeader) {
+    if (!isset($_COOKIE['auth_token'])) {
         http_response_code(401);
-        throw new Exception("Authorization header missing.");
+        throw new Exception("Authentication token missing.");
     }
 
-    $token = str_replace('Bearer ', '', $authHeader);
+    $token = $_COOKIE['auth_token'];
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -117,7 +114,6 @@ try {
 
     $bookings = [];
     while ($row = $result->fetch_assoc()) {
-        // Format start_time and end_time as HH:MM AM/PM
         if (!empty($row['start_time'])) {
             $row['start_time'] = date("h:i A", strtotime($row['start_time']));
         }
@@ -125,7 +121,6 @@ try {
             $row['end_time'] = date("h:i A", strtotime($row['end_time']));
         }
 
-        // Format dates as "Nov 27, 2025"
         $row['start_date'] = date("M d, Y", strtotime($row['start_date']));
         $row['end_date']   = date("M d, Y", strtotime($row['end_date']));
 

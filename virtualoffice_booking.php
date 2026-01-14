@@ -17,17 +17,16 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// -----------------------------------
+// JWT VERIFICATION (HttpOnly Cookie)
+// -----------------------------------
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authentication required"]);
     exit;
 }
-
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -111,7 +110,6 @@ if ($check_only) {
     exit;
 }
 
-
 // -----------------------------------
 // ⬇️ BOOKING LOGIC (Only runs if check_only is FALSE)
 // -----------------------------------
@@ -161,7 +159,6 @@ if ($actualEnd != $expectedEnd) {
     $conn->close();
     exit;
 }
-
 
 // Insert Booking
 $sql = "INSERT INTO virtualoffice_bookings 
