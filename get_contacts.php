@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTIONS handling
+require_once __DIR__ . '/config/env.php';   
+require_once __DIR__ . '/config/cors.php';  
 
 // ------------------------------------
 // Response Type
@@ -23,21 +23,19 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// JWT VERIFICATION LOGIC
+// JWT VERIFICATION LOGIC (HttpOnly Cookie)
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
+if (!isset($_COOKIE['auth_token'])) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Token cookie missing"]);
     exit;
 }
 
-$token = str_replace('Bearer ', '', $authHeader);
+$token = $_COOKIE['auth_token'];
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
+    $userData = (array)$decoded->data; // optional: user info
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -73,3 +71,4 @@ if ($result && $result->num_rows > 0) {
 echo json_encode($contacts);
 
 $conn->close();
+?>

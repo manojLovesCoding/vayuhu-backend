@@ -8,14 +8,14 @@ require_once __DIR__ . '/config/cors.php';  // centralized CORS headers & OPTION
 // ------------------------------------
 // Database Connection
 // ------------------------------------
-require_once 'db.php'; // your database connection
+require_once 'db.php';
 if (!$conn) {
     echo json_encode(["status" => "error", "message" => "Database connection failed"]);
     exit;
 }
 
 // ------------------------------------
-// JWT Verification
+// JWT Verification from HttpOnly Cookie
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
@@ -23,20 +23,13 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// ✅ Read token from HttpOnly cookie instead of Authorization header
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["status" => "error", "message" => "Authorization header missing"]);
+    echo json_encode(["status" => "error", "message" => "Authorization token missing"]);
     exit;
-}
-
-// Extract token from "Bearer <token>"
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader;
 }
 
 try {

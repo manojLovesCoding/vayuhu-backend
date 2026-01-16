@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Centralized CORS headers & OPTIONS handling
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS
 
 // ------------------------------------
 // Prevent PHP Warnings from breaking JSON
@@ -19,25 +19,18 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 // ------------------------------------
-// JWT Verification
+// JWT Verification from HttpOnly Cookie
 // ------------------------------------
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
+// Look for JWT in HttpOnly cookie "adminToken"
+if (!isset($_COOKIE['auth_token'])) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authentication cookie missing"]);
     exit;
 }
 
-// Extract token
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader;
-}
+$token = $_COOKIE['auth_token'];
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));

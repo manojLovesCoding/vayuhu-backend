@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // sets CORS headers & handles OPTIONS requests
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // ERROR HANDLING
@@ -12,34 +12,31 @@ ini_set("display_errors", 0);
 error_reporting(E_ALL);
 
 // ------------------------------------
-// ✅ INCLUDE JWT LIBRARY
+// INCLUDE JWT LIBRARY
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 // ------------------------------------
-// ✅ JWT SECRET FROM ENV
+// JWT SECRET FROM ENV
 // ------------------------------------
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ VERIFY JWT TOKEN
+// VERIFY JWT TOKEN (HttpOnly Cookie)
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Missing Authorization token"]);
+    echo json_encode(["success" => false, "message" => "Authentication token missing"]);
     exit;
 }
 
-$token = str_replace('Bearer ', '', $authHeader);
-
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $userData = (array)$decoded->data; // successfully verified user info
+    $userData = (array)$decoded->data;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);

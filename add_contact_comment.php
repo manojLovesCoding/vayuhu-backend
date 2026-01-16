@@ -31,20 +31,13 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 // ------------------------------------
 // JWT Verification
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// ✅ Get JWT from HttpOnly cookie instead of Authorization header
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Missing Authorization token"]);
+    echo json_encode(["success" => false, "message" => "Missing authorization token"]);
     exit;
-}
-
-// Extract token
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader;
 }
 
 try {

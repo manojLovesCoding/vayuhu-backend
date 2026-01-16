@@ -2,8 +2,8 @@
 // -------------------------
 // Load Environment & CORS
 // -------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Handles CORS preflight and headers
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // -------------------------
 // Prevent PHP warnings from breaking JSON
@@ -22,21 +22,14 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // -------------------------
-// ✅ Verify JWT Token
+// ✅ Verify JWT Token from HttpOnly Cookie ONLY
 // -------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Missing Authorization header"]);
+    echo json_encode(["success" => false, "message" => "Authentication token missing"]);
     exit;
-}
-
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader; // fallback
 }
 
 try {
@@ -44,7 +37,7 @@ try {
     $userData = (array)$decoded->data;
 } catch (Exception $e) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Invalid or expired token: " . $e->getMessage()]);
+    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
@@ -198,7 +191,7 @@ if ($stmt->execute()) {
     echo json_encode([
         "success" => true,
         "message" => "Blog added successfully",
-        "user" => $userData 
+        "user" => $userData
     ]);
 } else {
     echo json_encode(["success" => false, "message" => "DB Error: " . $stmt->error]);

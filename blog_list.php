@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // Error Handling
@@ -20,22 +20,17 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-// Get Authorization header
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// ✅ Get token ONLY from HttpOnly Cookie
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authentication token missing"]);
     exit;
 }
 
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
-
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid. User info is available in $decoded->data
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
@@ -80,13 +75,9 @@ if (!$result) {
 $blogs = [];
 
 while ($row = $result->fetch_assoc()) {
-    // Convert empty image to null
     $row["blog_image"] = !empty($row["blog_image"]) ? $row["blog_image"] : null;
-
-    // Keep date fields (optional formatting)
     $row["created_at"] = $row["created_at"] ?? null;
     $row["updated_at"] = $row["updated_at"] ?? null;
-
     $blogs[] = $row;
 }
 
@@ -96,7 +87,7 @@ while ($row = $result->fetch_assoc()) {
 $totalBlogs = count($blogs);
 
 if ($totalBlogs > 0) {
-    $dayOfYear = date('z'); 
+    $dayOfYear = date('z');
     $shift = $dayOfYear % $totalBlogs;
 
     $blogs = array_merge(

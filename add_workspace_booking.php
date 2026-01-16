@@ -19,18 +19,14 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     // ------------------------------------
-    // JWT VERIFICATION
+    // JWT VERIFICATION FROM COOKIE
     // ------------------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+    $token = $_COOKIE['auth_token'] ?? null; // <-- read JWT from HttpOnly cookie
 
-    if (!$authHeader) {
+    if (!$token) {
         http_response_code(401);
-        throw new Exception("Authorization header missing. Please log in.");
+        throw new Exception("No session found. Please log in.");
     }
-
-    // Extract token from "Bearer <token>"
-    $token = str_replace('Bearer ', '', $authHeader);
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));

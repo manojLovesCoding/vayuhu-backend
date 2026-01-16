@@ -27,25 +27,20 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// ✅ JWT Verification
+// ✅ JWT Verification (from HttpOnly cookie)
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
-    http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
-    exit;
-}
-
-$token = str_replace('Bearer ', '', $authHeader);
-
 try {
+    $token = $_COOKIE['auth_token'] ?? null;
+    if (!$token) {
+        http_response_code(401);
+        throw new Exception("Authorization token missing in cookies.");
+    }
+
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Access user data if needed: $userId = $decoded->data->id;
+    $userData = (array)$decoded->data; // Access user info if needed
 } catch (Exception $e) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
     exit;
 }
 

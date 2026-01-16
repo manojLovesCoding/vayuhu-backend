@@ -30,17 +30,14 @@ $secret_key = $_ENV['JWT_SECRET'];
 
 try {
     // ------------------------------------
-    // Get token from headers
+    // Get token from HttpOnly cookie
     // ------------------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+    $token = $_COOKIE['auth_token'] ?? null;
 
-    if (!$authHeader) {
+    if (!$token) {
         http_response_code(401);
-        throw new Exception("Authorization header missing.");
+        throw new Exception("Authorization token missing in cookies.");
     }
-
-    $token = str_replace('Bearer ', '', $authHeader);
 
     // ------------------------------------
     // Decode JWT

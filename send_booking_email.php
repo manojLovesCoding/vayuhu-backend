@@ -28,17 +28,14 @@ use PHPMailer\PHPMailer\Exception;
 
 try {
     // -----------------------------
-    // JWT Verification
+    // JWT Verification FROM COOKIE
     // -----------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+    $token = $_COOKIE['auth_token'] ?? null;  // <-- read JWT from HttpOnly cookie
 
-    if (!$authHeader) {
+    if (!$token) {
         http_response_code(401);
-        throw new Exception("Authorization header missing");
+        throw new Exception("No session found. Please log in.");
     }
-
-    $token = str_replace('Bearer ', '', $authHeader);
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -157,3 +154,4 @@ try {
     error_log("Mailer/JWT Error: " . $e->getMessage());
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }
+?>

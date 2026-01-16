@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Centralized CORS headers & OPTIONS handling
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // Prevent PHP warnings from breaking JSON
@@ -24,32 +24,24 @@ use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
 // ------------------------------------
-// Use JWT secret from .env
+// JWT Secret
 // ------------------------------------
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ------------------------------------
-// JWT Verification
+// JWT Verification from HttpOnly Cookie
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
+if (!isset($_COOKIE['auth_token'])) {
     http_response_code(401);
-    echo json_encode(["status" => "error", "message" => "Authorization header missing"]);
+    echo json_encode(["status" => "error", "message" => "Authentication cookie missing"]);
     exit;
 }
 
-// Extract token from "Bearer <token>"
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader;
-}
+$token = $_COOKIE['auth_token'];
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    $userData = (array)$decoded->data; // successfully verified user info
+    $userData = (array)$decoded->data;
 } catch (Exception $e) {
     http_response_code(401);
     echo json_encode(["status" => "error", "message" => "Invalid or expired token"]);
@@ -60,7 +52,6 @@ try {
 // Read JSON Input
 // ------------------------------------
 $input = json_decode(file_get_contents("php://input"), true);
-
 if (!$input) {
     echo json_encode(["status" => "error", "message" => "Invalid input data."]);
     exit;
@@ -82,7 +73,7 @@ if (empty($name) || empty($phone)) {
 }
 
 // ------------------------------------
-// Check for Duplicate Entry (Phone)
+// Check for Duplicate Phone
 // ------------------------------------
 $checkSql = "SELECT id FROM contact_requests WHERE phone = ?";
 $checkStmt = $conn->prepare($checkSql);
@@ -101,7 +92,7 @@ $checkStmt->close();
 // ------------------------------------
 // Insert Contact Request
 // ------------------------------------
-$status = "Pending"; // Default status
+$status = "Pending";
 $sql = "INSERT INTO contact_requests (name, email, phone, status, created_at) VALUES (?, ?, ?, ?, NOW())";
 $stmt = $conn->prepare($sql);
 $stmt->bind_param("ssss", $name, $email, $phone, $status);

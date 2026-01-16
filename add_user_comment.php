@@ -15,7 +15,7 @@ if (!$conn) {
 }
 
 // ------------------------------------
-// JWT Verification
+// JWT Verification (from HttpOnly cookie)
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
@@ -23,28 +23,19 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
-    http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
-    exit;
-}
-
-// Extract token from "Bearer <token>"
-if (preg_match('/Bearer\s(\S+)/', $authHeader, $matches)) {
-    $token = $matches[1];
-} else {
-    $token = $authHeader;
-}
-
 try {
+    // ✅ Read token from HttpOnly cookie
+    $token = $_COOKIE['auth_token'] ?? null;
+    if (!$token) {
+        http_response_code(401);
+        throw new Exception("Authorization token missing in cookies.");
+    }
+
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
     $userData = (array)$decoded->data; // User info
 } catch (Exception $e) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
     exit;
 }
 

@@ -27,19 +27,15 @@ if (!$conn) {
 $baseURL = "http://localhost/vayuhuBackend"; // adjust if folder name differs
 
 // ------------------------------------
-// JWT VERIFICATION LOGIC
+// JWT VERIFICATION USING HttpOnly COOKIE
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
+if (!isset($_COOKIE['auth_token'])) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authorization cookie missing"]);
     exit;
 }
 
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
+$token = $_COOKIE['auth_token'];
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
