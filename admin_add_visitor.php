@@ -19,17 +19,14 @@ $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
     // ------------------------------------
-    // JWT VERIFICATION
+    // JWT VERIFICATION FROM COOKIE
     // ------------------------------------
-    $headers = getallheaders();
-    $authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+    $token = $_COOKIE['auth_token'] ?? null; // ✅ read from HttpOnly cookie
 
-    if (!$authHeader) {
+    if (!$token) {
         http_response_code(401);
-        throw new Exception("Authorization header missing.");
+        throw new Exception("Authentication token missing.");
     }
-
-    $token = str_replace('Bearer ', '', $authHeader);
 
     try {
         $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
@@ -74,29 +71,27 @@ try {
     $check_in_time = $data['check_in_time'] ?? null;
     $check_out_time = $data['check_out_time'] ?? null;
     $reason = $data['reason'] ?? null;
-    // ✅ Integrated Amount Paid (Defaults to 0.00 if empty)
     $amount_paid = !empty($data['amount_paid']) ? (float)$data['amount_paid'] : 0.00;
-    $attendees = !empty($data['attendees']) ? (int)$data['attendees'] : 1; // ✅ New Variable
+    $attendees = !empty($data['attendees']) ? (int)$data['attendees'] : 1;
 
     // ------------------------------------
     // INSERT QUERY
     // ------------------------------------
-    // ... inside INSERT QUERY ...
-$sql = "INSERT INTO visitors (
-            user_id, admin_id, name, contact_no, email, 
-            company_name, visiting_date, check_in_time, 
-            check_out_time, reason, amount_paid, attendees
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO visitors (
+                user_id, admin_id, name, contact_no, email, 
+                company_name, visiting_date, check_in_time, 
+                check_out_time, reason, amount_paid, attendees
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-$stmt = $conn->prepare($sql);
+    $stmt = $conn->prepare($sql);
 
-// Added "i" at the end for the integer (attendees)
-$stmt->bind_param(
-    "iissssssssdi", 
-    $user_id, $admin_id, $name, $contact, $email, 
-    $company_name, $visiting_date, $check_in_time, 
-    $check_out_time, $reason, $amount_paid, $attendees
-);
+    $stmt->bind_param(
+        "iissssssssdi", 
+        $user_id, $admin_id, $name, $contact, $email, 
+        $company_name, $visiting_date, $check_in_time, 
+        $check_out_time, $reason, $amount_paid, $attendees
+    );
+
     if ($stmt->execute()) {
         echo json_encode(["success" => true, "message" => "Visitor added successfully"]);
     } else {

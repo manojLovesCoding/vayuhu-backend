@@ -9,21 +9,27 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-if (!$authHeader) {
+// ------------------------------------
+// JWT VERIFICATION FROM COOKIE
+// ------------------------------------
+$token = $_COOKIE['auth_token'] ?? null; // ✅ read from HttpOnly cookie
+if (!$token) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Unauthorized"]);
     exit;
 }
-$token = str_replace('Bearer ', '', $authHeader);
+
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
 } catch (Exception $e) {
     http_response_code(401);
+    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
+// ------------------------------------
+// GET INPUT
+// ------------------------------------
 $data = json_decode(file_get_contents("php://input"), true);
 
 if (!isset($data['id'])) {
@@ -36,8 +42,9 @@ $new_check_in = $conn->real_escape_string($data['check_in_time']);
 $new_check_out = $conn->real_escape_string($data['check_out_time']);
 $new_amount = $conn->real_escape_string($data['amount_paid']);
 
-// SQL logic: Append the new payment to the existing record using '|'
-// SQL used in admin_update_visitor.php
+// ------------------------------------
+// SQL: Append the new slot/payment
+// ------------------------------------
 $sql = "UPDATE visitors SET 
         check_in_time = CONCAT(check_in_time, ' | ', '$new_check_in'),
         check_out_time = CONCAT(check_out_time, ' | ', '$new_check_out'),

@@ -25,19 +25,15 @@ if (!$conn) {
 }
 
 // ------------------------------------
-// JWT VERIFICATION LOGIC
+// ✅ JWT VERIFICATION LOGIC (HttpOnly Cookie)
 // ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
+    echo json_encode(["success" => false, "message" => "Authentication required"]);
     exit;
 }
-
-// Extract token from "Bearer <token>"
-$token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));

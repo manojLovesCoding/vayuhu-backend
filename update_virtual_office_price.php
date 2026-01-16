@@ -6,7 +6,7 @@ require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
 require_once __DIR__ . '/config/cors.php';  // Sets CORS headers & handles OPTIONS preflight
 
 // -----------------------------------
-// ✅ JWT VERIFICATION
+// ✅ JWT VERIFICATION (HttpOnly Cookie)
 // -----------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
@@ -14,16 +14,14 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// ✅ Read token from HttpOnly cookie instead of Authorization header
+$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$authHeader) {
+if (!$token) {
     http_response_code(401);
-    echo json_encode(["status" => "error", "message" => "Authorization header missing"]);
+    echo json_encode(["status" => "error", "message" => "Authentication required"]);
     exit;
 }
-
-$token = str_replace('Bearer ', '', $authHeader);
 
 try {
     $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));

@@ -15,7 +15,7 @@ if (!$conn) {
 }
 
 // ------------------------------------
-// JWT Verification (Optional for Enquiries)
+// JWT Verification (Optional for Enquiries via HttpOnly cookie)
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
 use Firebase\JWT\JWT;
@@ -23,21 +23,29 @@ use Firebase\JWT\Key;
 
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
+// ✅ Read token from HttpOnly cookie instead of Authorization header
+$token = $_COOKIE['auth_token'] ?? null;
 
-if ($authHeader) {
-    // Extract token from "Bearer <token>"
-    $token = str_replace('Bearer ', '', $authHeader);
-    try {
-        $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-        // Optional: Link $decoded->data->id to the enquiry if needed
-    } catch (Exception $e) {
-        http_response_code(401);
-        echo json_encode(["status" => "error", "message" => "Invalid or expired session. Please log in again."]);
-        exit;
-    }
+if (!$token) {
+    http_response_code(401);
+    echo json_encode([
+        "status" => "error",
+        "message" => "You must be logged in to submit an enquiry."
+    ]);
+    exit;
 }
+
+try {
+    $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
+} catch (Exception $e) {
+    http_response_code(401);
+    echo json_encode([
+        "status" => "error",
+        "message" => "Invalid or expired session. Please log in again"
+    ]);
+    exit;
+}
+
 
 // ------------------------------------
 // Get JSON Input
