@@ -53,8 +53,20 @@ $api = new Api($razorpay_config['api_key'], $razorpay_config['api_secret']);
 $data = json_decode(file_get_contents("php://input"), true);
 
 try {
+    // 🔐 Verify Razorpay signature
     $api->utility->verifyPaymentSignature($data);
-    echo json_encode(["success" => true]);
+
+    // ✅ Return verified payment details
+    echo json_encode([
+        "success" => true,
+        "payment_id" => $data['razorpay_payment_id'] ?? null,
+        "order_id"   => $data['razorpay_order_id'] ?? null
+    ]);
+
 } catch (SignatureVerificationError $e) {
-    echo json_encode(["success" => false, "message" => $e->getMessage()]);
+
+    echo json_encode([
+        "success" => false,
+        "message" => $e->getMessage()
+    ]);
 }

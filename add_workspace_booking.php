@@ -12,6 +12,7 @@ error_reporting(E_ALL);
 // Include JWT Library
 // ------------------------------------
 require_once __DIR__ . '/vendor/autoload.php';
+
 use Firebase\JWT\JWT;
 use Firebase\JWT\Key;
 
@@ -67,6 +68,8 @@ try {
     $coupon_code     = trim($data['coupon_code'] ?? '');
     $referral_source = trim($data['referral_source'] ?? '');
     $terms_accepted  = (int)($data['terms_accepted'] ?? 0);
+    $payment_id      = trim($data['payment_id'] ?? '');
+
 
     if ($user_id <= 0 || $space_id <= 0 || !$workspace_title || !$plan_type || !$start_date || !$end_date) {
         throw new Exception("Missing required fields.");
@@ -94,13 +97,15 @@ try {
     // --- Validate user and space exist ---
     $stmt = $conn->prepare("SELECT 1 FROM users WHERE id = ? LIMIT 1");
     $stmt->bind_param("i", $user_id);
-    $stmt->execute(); $stmt->store_result();
+    $stmt->execute();
+    $stmt->store_result();
     if ($stmt->num_rows === 0) throw new Exception("Invalid user_id: user not found.");
     $stmt->close();
 
     $stmt = $conn->prepare("SELECT 1 FROM spaces WHERE id = ? LIMIT 1");
     $stmt->bind_param("i", $space_id);
-    $stmt->execute(); $stmt->store_result();
+    $stmt->execute();
+    $stmt->store_result();
     if ($stmt->num_rows === 0) throw new Exception("Invalid space_id: space not found.");
     $stmt->close();
 
@@ -137,28 +142,49 @@ try {
 
     $stmt = $conn->prepare("
         INSERT INTO workspace_bookings (
-            booking_id, user_id, space_id, seat_codes, workspace_title, plan_type,
-            start_date, end_date, start_time, end_time,
-            total_days, total_hours, num_attendees,
-            price_per_unit, base_amount, gst_amount, discount_amount, final_amount,
-            coupon_code, referral_source, terms_accepted, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    booking_id, user_id, space_id, seat_codes, workspace_title, plan_type,
+    start_date, end_date, start_time, end_time,
+    total_days, total_hours, num_attendees,
+    price_per_unit, base_amount, gst_amount, discount_amount, final_amount,
+    coupon_code, referral_source, terms_accepted, status, payment_id
+)
+ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+
     ");
 
     $stmt->bind_param(
-        "siisssssssiidddddssiss",
-        $booking_id, $user_id, $space_id, $seat_codes, $workspace_title, $plan_type,
-        $start_date, $end_date, $start_time, $end_time,
-        $total_days, $total_hours, $num_attendees,
-        $price_per_unit, $base_amount, $gst_amount, $discount_amount, $final_amount,
-        $coupon_code, $referral_source, $terms_accepted, $status
+        "siisssssssiidddddssisss",
+        $booking_id,
+        $user_id,
+        $space_id,
+        $seat_codes,
+        $workspace_title,
+        $plan_type,
+        $start_date,
+        $end_date,
+        $start_time,
+        $end_time,
+        $total_days,
+        $total_hours,
+        $num_attendees,
+        $price_per_unit,
+        $base_amount,
+        $gst_amount,
+        $discount_amount,
+        $final_amount,
+        $coupon_code,
+        $referral_source,
+        $terms_accepted,
+        $status,
+        $payment_id
     );
+
 
     if (!$stmt->execute()) throw new Exception("Could not save booking. " . $stmt->error);
     $stmt->close();
 
     // --- Simulate payment processing ---
-    $payment_successful = true; // Replace with real payment gateway response
+    $payment_successful = !empty($payment_id); // Replaced with real payment gateway response
     if ($payment_successful) {
         $update = $conn->prepare("UPDATE workspace_bookings SET status = 'confirmed' WHERE booking_id = ?");
         $update->bind_param("s", $booking_id);
@@ -174,10 +200,8 @@ try {
         "booking_id" => $booking_id,
         "status" => $payment_successful ? 'confirmed' : 'pending'
     ]);
-
 } catch (Exception $e) {
     $code = (strpos($e->getMessage(), "token") !== false || strpos($e->getMessage(), "Authorization") !== false) ? 401 : 400;
     http_response_code($code);
     echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }
-?>
