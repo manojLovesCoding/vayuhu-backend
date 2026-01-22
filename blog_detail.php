@@ -1,9 +1,8 @@
 <?php
 // ------------------------------------
-// Load Environment & Centralized CORS
+// Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // Database Connection
@@ -11,41 +10,6 @@ require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
 require_once "db.php";
 if (!$conn) {
     echo json_encode(["success" => false, "message" => "Database connection failed"]);
-    exit;
-}
-
-// ------------------------------------
-// Include JWT Library
-// ------------------------------------
-require_once __DIR__ . '/vendor/autoload.php';
-use Firebase\JWT\JWT;
-use Firebase\JWT\Key;
-
-// ------------------------------------
-// Secret Key from .env
-// ------------------------------------
-$secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
-
-// ------------------------------------
-// JWT Verification
-// ------------------------------------
-$headers = getallheaders();
-$authHeader = $headers['Authorization'] ?? $headers['authorization'] ?? null;
-
-if (!$authHeader) {
-    http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Authorization header missing"]);
-    exit;
-}
-
-$token = str_replace('Bearer ', '', $authHeader);
-
-try {
-    $decoded = JWT::decode($token, new Key($secret_key, 'HS256'));
-    // Token is valid, user info available in $decoded->data
-} catch (Exception $e) {
-    http_response_code(401);
-    echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
 }
 
@@ -59,7 +23,9 @@ if ($id <= 0) {
     exit;
 }
 
-// Prepared statement for security
+// ------------------------------------
+// Prepared Query
+// ------------------------------------
 $sql = "SELECT 
             id,
             added_by,
@@ -79,7 +45,10 @@ $stmt->execute();
 $result = $stmt->get_result();
 
 if (!$result) {
-    echo json_encode(["success" => false, "message" => "SQL Error: " . $conn->error]);
+    echo json_encode([
+        "success" => false,
+        "message" => "SQL Error: " . $conn->error
+    ]);
     exit;
 }
 
@@ -90,16 +59,20 @@ if ($result->num_rows === 0) {
 
 $row = $result->fetch_assoc();
 
-// Construct full image URL
-$row["blog_image"] = !empty($row["blog_image"]) 
-    ? "http://localhost/vayuhuBackend/" . $row["blog_image"] 
+// ------------------------------------
+// Construct Full Image URL
+// ------------------------------------
+$row["blog_image"] = !empty($row["blog_image"])
+    ? "http://localhost/vayuhuBackend/" . $row["blog_image"]
     : null;
 
 // ------------------------------------
 // Return JSON Response
 // ------------------------------------
-echo json_encode(["success" => true, "blog" => $row], JSON_UNESCAPED_SLASHES);
+echo json_encode(
+    ["success" => true, "blog" => $row],
+    JSON_UNESCAPED_SLASHES
+);
 
 $stmt->close();
 $conn->close();
-?>

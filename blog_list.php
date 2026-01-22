@@ -21,9 +21,9 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 // ✅ Get token ONLY from HttpOnly Cookie
-$token = $_COOKIE['auth_token'] ?? null;
+//$token = $_COOKIE['auth_token'] ?? null;
 
-if (!$token) {
+{/*if (!$token) {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Authentication token missing"]);
     exit;
@@ -35,7 +35,7 @@ try {
     http_response_code(401);
     echo json_encode(["success" => false, "message" => "Invalid or expired token"]);
     exit;
-}
+}*/}
 
 // ------------------------------------
 // Database Connection
