@@ -2,8 +2,8 @@
 // ------------------------------------
 // Load Environment & Centralized CORS
 // ------------------------------------
-require_once __DIR__ . '/config/env.php';   // Loads $_ENV['JWT_SECRET']
-require_once __DIR__ . '/config/cors.php';  // Handles CORS & OPTIONS requests
+require_once __DIR__ . '/config/env.php';
+require_once __DIR__ . '/config/cors.php';
 
 // ------------------------------------
 // Error Handling
@@ -22,11 +22,7 @@ use Firebase\JWT\Key;
 $secret_key = $_ENV['JWT_SECRET'] ?? die("JWT_SECRET not set in .env");
 
 try {
-    // -------------------------------
-    // Get token from HttpOnly cookie
-    // -------------------------------
     $token = $_COOKIE['auth_token'] ?? null;
-
     if (!$token) {
         http_response_code(401);
         throw new Exception("Authorization token missing. Please log in.");
@@ -38,11 +34,7 @@ try {
         http_response_code(401);
         throw new Exception("Invalid or expired token. Please log in again.");
     }
-    // Token verified. User info in $decoded->data
 
-    // ------------------------------------
-    // Database
-    // ------------------------------------
     include 'db.php';
 
     $data = json_decode(file_get_contents("php://input"), true);
@@ -61,12 +53,18 @@ try {
         throw new Exception("Missing required parameters.");
     }
 
-    if (!in_array($plan_type, ['hourly', 'daily', 'monthly'])) {
-        throw new Exception("Invalid plan_type value.");
-    }
-
+    // Standardize time formats for comparison
     if ($start_time && strlen($start_time) === 5) $start_time .= ":00";
     if ($end_time && strlen($end_time) === 5) $end_time .= ":00";
+
+    // --- HOURLY INCREMENT VALIDATION (BACKEND SAFETY) ---
+    if ($plan_type === 'hourly' && $start_time && $end_time) {
+        $t1 = new DateTime($start_time);
+        $t2 = new DateTime($end_time);
+        if ($t1->format('i') !== $t2->format('i')) {
+            throw new Exception("Bookings must be in full-hour increments.");
+        }
+    }
 
     // ------------------------------------
     // EXISTING BOOKINGS CHECK
@@ -82,26 +80,15 @@ try {
              OR (plan_type = 'monthly' AND NOT (? < start_date OR ? > end_date))
               )
     ");
-    $stmt->bind_param(
-        "issssss",
-        $space_id,
-        $start_date,
-        $end_time,
-        $start_time,
-        $start_date,
-        $start_date,
-        $end_date
-    );
+    $stmt->bind_param("issssss", $space_id, $start_date, $end_time, $start_time, $start_date, $start_date, $end_date);
     $stmt->execute();
     $result = $stmt->get_result();
 
     if ($result && $result->num_rows > 0) {
         $hasFullDayBlock = false;
         $blockedEndDate = null;
-        $conflicts = [];
-
+        
         while ($row = $result->fetch_assoc()) {
-            $conflicts[] = $row;
             if (in_array($row['plan_type'], ['daily', 'monthly'])) {
                 if ($start_date >= $row['start_date'] && $start_date <= $row['end_date']) {
                     $hasFullDayBlock = true;
@@ -110,26 +97,23 @@ try {
                 }
             }
         }
-        $stmt->close();
 
         if ($hasFullDayBlock) {
             $nextAvailableDate = date('Y-m-d', strtotime($blockedEndDate . ' +1 day'));
             echo json_encode([
                 "success" => false,
                 "message" => "This workspace is fully booked for the selected date.",
-                "available_dates" => [
-                    "from" => $nextAvailableDate
-                ]
+                "available_dates" => ["from" => $nextAvailableDate]
             ]);
             exit;
         }
 
+        // If Hourly Conflict: Suggest 1-hour slots matching 15-min intervals
         if ($plan_type === 'hourly') {
             $bookStmt = $conn->prepare("
                 SELECT start_time, end_time
                 FROM workspace_bookings
-                WHERE space_id = ? AND start_date = ? AND plan_type = 'hourly'
-                  AND status IN ('confirmed', 'pending')
+                WHERE space_id = ? AND start_date = ? AND status IN ('confirmed', 'pending')
                 ORDER BY start_time ASC
             ");
             $bookStmt->bind_param("is", $space_id, $start_date);
@@ -142,64 +126,48 @@ try {
             }
             $bookStmt->close();
 
-            $openingHour = 8;
-            $closingHour = 19;
             $availableSlots = [];
+            // Office Hours: 08:00 to 20:00 (8 PM)
+            // We check every 15-minute start possibility
+            for ($h = 8; $h < 20; $h++) {
+                for ($m = 0; $m < 60; $m += 15) {
+                    $slotStart = sprintf("%02d:%02d:00", $h, $m);
+                    // End time is exactly 1 hour later per your requirement
+                    $slotEnd = sprintf("%02d:%02d:00", $h + 1, $m);
+                    
+                    if ($h + 1 > 20 || ($h + 1 == 20 && $m > 0)) continue;
 
-            for ($hour = $openingHour; $hour <= $closingHour; $hour++) {
-                $slotStart = sprintf("%02d:00:00", $hour);
-                $slotEnd   = sprintf("%02d:59:00", $hour);
-                $isAvailable = true;
-
-                foreach ($bookedRanges as $b) {
-                    if (!($slotEnd <= $b['start'] || $slotStart >= $b['end'])) {
-                        $isAvailable = false;
-                        break;
+                    $isAvailable = true;
+                    foreach ($bookedRanges as $b) {
+                        // Overlap logic
+                        if (!($slotEnd <= $b['start'] || $slotStart >= $b['end'])) {
+                            $isAvailable = false;
+                            break;
+                        }
                     }
-                }
 
-                if ($isAvailable) {
-                    $displayStart = date("g:i A", strtotime($slotStart));
-                    $displayEnd   = date("g:i A", strtotime($slotEnd));
-                    $availableSlots[] = "$displayStart - $displayEnd";
+                    if ($isAvailable) {
+                        $availableSlots[] = date("g:i A", strtotime($slotStart)) . " - " . date("g:i A", strtotime($slotEnd));
+                    }
                 }
             }
 
             echo json_encode([
                 "success" => false,
-                "message" => "This workspace is already booked for the selected time/date.",
-                "available_slots" => $availableSlots
+                "message" => "The selected time slot is already booked.",
+                "available_slots" => array_values(array_unique($availableSlots))
             ]);
             exit;
         }
 
-        // DAILY / MONTHLY CONFLICT
-        echo json_encode([
-            "success" => false,
-            "message" => "This workspace is already booked for the selected time/date."
-        ]);
+        echo json_encode(["success" => false, "message" => "Workspace unavailable for selected dates."]);
         exit;
     }
-    $stmt->close();
 
-    // ------------------------------------
-    // NO CONFLICT
-    // ------------------------------------
-    echo json_encode([
-        "success" => true,
-        "message" => "Workspace available for booking."
-    ]);
+    echo json_encode(["success" => true, "message" => "Workspace available!"]);
 
 } catch (Exception $e) {
-    $statusCode = (
-        $e->getCode() === 401 ||
-        stripos($e->getMessage(), 'token') !== false
-    ) ? 401 : 400;
-
-    http_response_code($statusCode);
-    echo json_encode([
-        "success" => false,
-        "message" => $e->getMessage()
-    ]);
+    http_response_code(400);
+    echo json_encode(["success" => false, "message" => $e->getMessage()]);
 }
 ?>
